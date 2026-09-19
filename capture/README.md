@@ -2,8 +2,8 @@
 
 This directory is separate from the offline converter. No real traffic capture,
 certificate installation, or user credentials are used in development. The module
-has a working local synthetic harness; the interactive iPhone workflow is not yet
-implemented. No real Authy/iPhone compatibility is claimed. The offline
+has a working local synthetic harness and an [interactive workflow](WORKFLOW.md).
+No real Authy/iPhone compatibility is claimed. The offline
 compatibility gate has passed.
 
 The intended policy rejects traffic outside an explicit endpoint profile. The
@@ -89,7 +89,10 @@ PYTHONPATH=capture:src .venv/bin/python -m pytest -q capture/tests
 The parent deletes only its newly created session directory. If the parent is
 killed or cleanup fails, CA material may remain; deletion is not physical erasure.
 No RAM volume or iPhone trust-removal verification is implemented. Interactive
-capture, explicit source provenance, and final CI evidence remain in progress.
+workflow validation and final CI evidence are still being expanded. Capture
+provenance records the explicit endpoint, app version, source reference, and pinned
+engine revision. Its hash becomes part of each record's origin; the parameter-file
+binding includes it. This preserves a declaration without authenticating it.
 
 Sources:
 

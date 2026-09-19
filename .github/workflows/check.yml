@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: '3.14'
       - run: python -m pip install --require-hashes -r requirements-dev.lock
-      - run: python -m pip install --no-deps .
+      - run: python -m pip install --no-deps --no-build-isolation .
       - run: authy-migrate --help
       - run: rustup toolchain install 1.92.0 --profile minimal
       - run: cargo +1.92.0 build --locked --manifest-path reference/Cargo.toml

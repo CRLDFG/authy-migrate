@@ -20,6 +20,14 @@ password normalization, and Base32/hex heuristics are not used. Independent Node
 |---|---|---|
 | `twilio-csv` | Comma-delimited CSV with exact name, encrypted_seed, salt, iv headers | 100000, only for the pinned community CSV profile above |
 | `authy-json` | Object containing authenticator_tokens; each record has name, encrypted_seed, salt, unique_iv, key_derivation_iterations | Rejected |
+| `authy-sync-json` | The experimental capture envelope, including explicit capture provenance and authenticator_tokens | Rejected |
+
+`authy-sync-json` is the in-memory capture bridge. Its `capture` object records
+version 1, host, port, exact path, app_version, source_reference, and the 40-digit
+engine_revision. It is never inferred from ordinary JSON. The record origin
+includes a fingerprint of that metadata, and parameter binding covers the full
+envelope. This records provenance claims without authenticating them. The default
+capture workflow does not write this envelope to disk.
 
 Optional record fields: `account_type`, `issuer`, `digits`, `algorithm`, `period`,
 `unique_id`, `logo`, and explicit CSV iteration counts. Present iteration counts

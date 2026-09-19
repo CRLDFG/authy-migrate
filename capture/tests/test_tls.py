@@ -78,7 +78,8 @@ def start(upstream, **extra):
     endpoint=dict(host='localhost',port=server.server_port,path=PATH,client_ip='127.0.0.1')
     endpoint.update(extra.pop('endpoint',{}))
     return Session(PYTHON,endpoint,AUTH,upstream_ca=extra.pop('upstream_ca',crt),
-                   timeout=extra.pop('timeout',15),**extra)
+                   timeout=extra.pop('timeout',15),app_version='synthetic/v1',
+                   source_reference='local synthetic TLS harness',**extra)
 
 
 def body(index=0):
@@ -99,13 +100,13 @@ def tunnel(session, port, host='localhost', auth=AUTH):
     return sock,bytes(response)
 
 
-def request(session, port, *, path=PATH, authority=None, content_type='application/x-www-form-urlencoded',index=0):
-    sock,response=tunnel(session,port)
+def request(session, port, *, path=PATH, authority=None, content_type='application/x-www-form-urlencoded',index=0,auth=AUTH,raw_body=None):
+    sock,response=tunnel(session,port,auth=auth)
     assert b'200' in response
     context=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.load_verify_locations(cafile=str(session.certificate))
     with context.wrap_socket(sock,server_hostname='localhost') as tls:
-        payload=body(index)
+        payload=body(index) if raw_body is None else raw_body
         tls.sendall((f'POST {path} HTTP/1.1\r\nHost: {authority or "localhost:"+str(port)}\r\n'
             f'Content-Type: {content_type}\r\nContent-Length: {len(payload)}\r\nConnection: close\r\n\r\n').encode()+payload)
         return tls.recv(4096)
@@ -217,7 +218,7 @@ def test_capture_to_both_official_proton_importers_after_worker_exit(upstream):
     parameters=json.loads((ROOT/'tests/fixtures/authy-synthetic.json.parameters.json').read_bytes())
     parameters['source_sha256']=hashlib.sha256(captured).hexdigest()
     # These public passwords are first used after the capture worker was reaped.
-    archive=convert_authy(captured,'authy-json',json.dumps(parameters).encode(),
+    archive=convert_authy(captured,'authy-sync-json',json.dumps(parameters).encode(),
                          ' Authy backup synthétique 🔑 ',PASSWORD)
     for name in ['reference/target/debug/authy-migrate-reference-check',
                  'reference/legacy/target/debug/authy-migrate-legacy-check']:
@@ -246,6 +247,15 @@ def test_worker_sigkill_is_not_success(upstream):
         assert not root.exists()
 
 
+def test_repeated_sync_identifier_is_not_counted_as_another_account(upstream):
+    with start(upstream) as session:
+        assert b'200' in request(session,upstream[0].server_port)
+        session.collect()
+        # The source sees its unmodified second request, but capture must fail.
+        request(session,upstream[0].server_port)
+        with pytest.raises(CaptureError):session.finish()
+
+
 def test_no_account_material_deliberately_saved_in_session_directory(upstream):
     with start(upstream) as session:
         assert b'200' in request(session,upstream[0].server_port)
@@ -258,3 +268,31 @@ def test_no_account_material_deliberately_saved_in_session_directory(upstream):
                 assert b'encrypted_seed' not in contents
                 assert path.stat().st_mode & 0o077 == 0
         session.finish()
+
+
+def test_cleanup_failure_prevents_success(upstream,monkeypatch):
+    session=start(upstream)
+    cleanup=session.directory.cleanup
+    try:
+        assert b'200' in request(session,upstream[0].server_port)
+        session.collect()
+        def fail_cleanup():
+            raise OSError('Synthetic cleanup failure')
+        monkeypatch.setattr(session.directory,'cleanup',fail_cleanup)
+        with pytest.raises(OSError,match='Synthetic cleanup failure'):
+            session.finish()
+        assert session.process.poll()==0
+        assert session.root.exists()
+    finally:
+        monkeypatch.setattr(session.directory,'cleanup',cleanup)
+        session.close()
+    assert not session.root.exists()
+
+
+def test_invalid_record_after_valid_record_blocks_partial_conversion(upstream):
+    with start(upstream) as session:
+        assert b'200' in request(session,upstream[0].server_port)
+        session.collect()
+        assert b'422' in request(session,upstream[0].server_port,raw_body=b'name=invalid')
+        with pytest.raises(CaptureError):session.finish()
+    assert upstream[0].bodies==[body()]

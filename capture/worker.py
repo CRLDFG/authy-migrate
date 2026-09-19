@@ -2,6 +2,8 @@
 import asyncio
 import json
 import logging
+import ipaddress
+import importlib.metadata
 import os
 from pathlib import Path
 import signal
@@ -13,6 +15,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT.parent / "src"))
 from policy import CaptureError, Endpoint, MAX_BODY, encrypted_record
+from version import ENGINE_URL, ENGINE_ARCHIVE_SHA256
 from authy_migrate.authy import parse_authy
 from mitmproxy import http, options
 from mitmproxy.tools.dump import DumpMaster
@@ -36,6 +39,7 @@ class Capture:
         self.total_bytes = 0
         self.total_iterations = 0
         self.clients = set()
+        self.identifiers = set()
 
     def client_connected(self, client):
         if not self.endpoint.client_allowed(client.peername[0]) or len(self.clients) >= 8:
@@ -103,6 +107,11 @@ class Capture:
         if not 200 <= flow.response.status_code < 300:
             self.failed = True
             return
+        if record['unique_id'] in self.identifiers:
+            self.failed = True
+            self.master.shutdown()
+            return
+        self.identifiers.add(record['unique_id'])
         self.count += 1
         self.total_bytes += len(json.dumps(record))
         self.total_iterations += int(record["key_derivation_iterations"])
@@ -129,18 +138,26 @@ class Capture:
 
 
 async def run(config):
+    distribution = importlib.metadata.distribution('mitmproxy')
+    source = json.loads(distribution.read_text('direct_url.json') or '{}')
+    if (distribution.version != '13.0.0.dev0' or source.get('url') != ENGINE_URL
+            or source.get('archive_info', {}).get('hashes', {}).get('sha256') != ENGINE_ARCHIVE_SHA256):
+        raise CaptureError('Capture engine does not match the pinned source.')
     required = {"endpoint", "confdir", "listen_host", "proxy_auth", "timeout"}
     if set(config) - required - {"upstream_ca"} or not required <= config.keys():
         raise CaptureError("Invalid worker configuration.")
     endpoint = Endpoint(**config["endpoint"])
     if (type(config["timeout"]) is not int or not 1 <= config["timeout"] <= 300
-            or config["listen_host"] not in ("127.0.0.1", endpoint.client_ip)
+            or not ipaddress.ip_address(config["listen_host"]).is_private
+            or ipaddress.ip_address(config["listen_host"]).is_unspecified
             or type(config["proxy_auth"]) is not str
             or not 20 <= len(config["proxy_auth"]) <= 256
             or config["proxy_auth"].count(":") != 1):
         raise CaptureError("Invalid session bounds or authentication.")
     directory = Path(config["confdir"])
-    if not directory.is_dir() or list(directory.iterdir()):
+    if (not directory.is_dir() or directory.is_symlink() or list(directory.iterdir())
+            or directory.stat().st_uid != os.getuid()
+            or directory.stat().st_mode & 0o077):
         raise CaptureError("Capture requires a fresh private directory.")
     os.umask(0o077)
     logging.disable(logging.CRITICAL)

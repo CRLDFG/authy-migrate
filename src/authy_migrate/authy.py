@@ -6,7 +6,7 @@ validation never establishes authenticity, password correctness, or code validit
 import base64
 import binascii
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import io
 import json
@@ -22,10 +22,11 @@ from .proton import encrypt_export
 MAX_INPUT_BYTES = 8 * 1024 * 1024
 MAX_ITERATIONS = 1_000_000
 MAX_TOTAL_ITERATIONS = 10_000_000
-FORMATS = ("twilio-csv", "authy-json")
+FORMATS = ("twilio-csv", "authy-json", "authy-sync-json")
 PROFILES = {
     "twilio-csv": "community-csv/1995e8d22414d44016453421a253d1636a9504de",
     "authy-json": "community-json/e0e2b29c2359a0c72315095401a12c3334350423",
+    "authy-sync-json": "experimental-ios-form/v1",
 }
 
 
@@ -161,9 +162,14 @@ def parse_authy(data: bytes, source_format: str) -> list[EncryptedAuthyRecord]:
             raise ValidationError("Invalid CSV; no quote removal or line repair is performed.") from None
     else:
         document = _json(text)
+        allowed = {"authenticator_tokens", "authy_tokens"}
+        if source_format == "authy-sync-json":
+            allowed.add("capture")
         if (type(document) is not dict or "authenticator_tokens" not in document
-                or document.keys() - {"authenticator_tokens", "authy_tokens"}):
+                or document.keys() - allowed):
             raise ValidationError("Unsupported JSON envelope.")
+        if source_format == "authy-sync-json":
+            validate_capture_provenance(document.get("capture"))
         if "authy_tokens" in document and document["authy_tokens"] != []:
             raise ValidationError("Export includes proprietary Authy tokens; nothing converted.")
         rows = document["authenticator_tokens"]
@@ -178,7 +184,29 @@ def parse_authy(data: bytes, source_format: str) -> list[EncryptedAuthyRecord]:
             raise ValidationError(f"Record {ordinal}: {error}") from None
     if sum(r.iterations for r in records) > MAX_TOTAL_ITERATIONS:
         raise ValidationError("Aggregate KDF cost exceeds the processing limit.")
+    if source_format == "authy-sync-json":
+        identifiers = [r.identifier for r in records]
+        if None in identifiers or len(set(identifiers)) != len(identifiers):
+            raise ValidationError("Capture requires distinct source identifiers; repeated sync records are ambiguous.")
+        fingerprint = hashlib.sha256(json.dumps(document["capture"], sort_keys=True,
+                                                separators=(",", ":")).encode()).hexdigest()
+        records = [replace(r, origin=r.origin + "/" + fingerprint) for r in records]
     return records
+
+
+def validate_capture_provenance(value):
+    required = {"version", "host", "port", "path", "app_version", "source_reference", "engine_revision"}
+    if (type(value) is not dict or value.keys() != required
+            or type(value["version"]) is not int or value["version"] != 1):
+        raise ValidationError("Invalid capture provenance.")
+    for key in ("host", "path", "app_version", "source_reference", "engine_revision"):
+        _text(value[key], 512)
+    if (not re.fullmatch(r"[a-z0-9]+(?:[.-][a-z0-9]+)*", value["host"])
+            or not re.fullmatch(r"/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+", value["path"])
+            or not re.fullmatch(r"[0-9a-f]{40}", value["engine_revision"])
+            or type(value["port"]) is not int):
+        raise ValidationError("Invalid capture endpoint provenance.")
+    _integer(value["port"], 65535)
 
 
 def parameter_template(data, source_format):

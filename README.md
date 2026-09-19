@@ -9,6 +9,9 @@ has been verified with two official importers and Proton 1.4.3 (6) on a Mac.
 No proxy, certificate, Proton account, or cloud service is required.
 
 Read the [conversion workflow and supported formats](docs/authy-input.md).
+The optional [capture module](capture/README.md) runs separately and remains
+experimental; its [local workflow](capture/WORKFLOW.md) has synthetic validation
+only. It is not required for file conversion.
 The conversion path never deliberately writes decrypted seeds in plaintext.
 Users must verify source parameters and resulting codes locally.
 
@@ -20,7 +23,8 @@ reference checks. Installation needs Internet access; conversion does not.
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install --require-hashes -r requirements.lock
-.venv/bin/python -m pip install --no-deps .
+.venv/bin/python -m pip install --require-hashes -r requirements-build.lock
+.venv/bin/python -m pip install --no-deps --no-build-isolation .
 .venv/bin/authy-migrate demo demo.proton.json
 ```
 

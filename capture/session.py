@@ -10,10 +10,17 @@ import tempfile
 import time
 
 from policy import CaptureError, MAX_BODY
+from version import ENGINE_REVISION
 
 
 class Session:
-    def __init__(self, python, endpoint, proxy_auth, *, timeout=60, upstream_ca=None):
+    def __init__(self, python, endpoint, proxy_auth, *, timeout=60, upstream_ca=None,
+                 listen_host='127.0.0.1', app_version, source_reference):
+        self.provenance = dict(version=1, host=endpoint['host'], port=endpoint['port'],
+            path=endpoint['path'], app_version=app_version,
+            source_reference=source_reference, engine_revision=ENGINE_REVISION)
+        from authy_migrate.authy import validate_capture_provenance
+        validate_capture_provenance(self.provenance)
         self.directory = tempfile.TemporaryDirectory(prefix="authy-capture-")
         self.root = Path(self.directory.name)
         confdir = self.root / "config"
@@ -23,7 +30,7 @@ class Session:
         self.total = 0
         self.done = None
         self.selector = selectors.DefaultSelector()
-        config = dict(endpoint=endpoint, confdir=str(confdir), listen_host="127.0.0.1",
+        config = dict(endpoint=endpoint, confdir=str(confdir), listen_host=listen_host,
                       proxy_auth=proxy_auth, timeout=timeout)
         if upstream_ca is not None:
             config["upstream_ca"] = str(upstream_ca)
@@ -102,8 +109,8 @@ class Session:
                 raise CaptureError("Capture incomplete; no conversion permitted.")
             # Parent independently validates all received records and aggregate KDF cost.
             from authy_migrate.authy import parse_authy
-            result = json.dumps({"authenticator_tokens": self.records}).encode()
-            parse_authy(result, "authy-json")
+            result = json.dumps({"capture": self.provenance, "authenticator_tokens": self.records}).encode()
+            parse_authy(result, "authy-sync-json")
             return result
         finally:
             self.close()
