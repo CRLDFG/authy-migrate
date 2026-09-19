@@ -24,6 +24,19 @@ jobs:
       - run: cargo +1.92.0 build --locked --manifest-path reference/Cargo.toml
       - run: cargo +1.92.0 build --locked --manifest-path reference/legacy/Cargo.toml
       - run: python -m pytest -q
+      - name: Prepare isolated synthetic capture environment (macOS arm64)
+        if: runner.os == 'macOS'
+        run: |
+          python -m venv .capture-venv
+          .capture-venv/bin/python -m pip install --require-hashes -r capture/bootstrap.lock
+          .capture-venv/bin/python -m pip install --require-hashes --no-build-isolation -r capture/requirements-macos-arm64.lock
+          .capture-venv/bin/python -m pip check
+          python capture/audit_environment.py .capture-venv/bin/python
+      - name: Actual synthetic TLS capture and lifecycle tests
+        if: runner.os == 'macOS'
+        env:
+          PYTHONPATH: capture:src
+        run: python -m pytest -q capture/tests
   audit:
     runs-on: ubuntu-latest
     timeout-minutes: 20

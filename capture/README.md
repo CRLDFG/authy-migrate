@@ -2,7 +2,9 @@
 
 This directory is separate from the offline converter. No real traffic capture,
 certificate installation, or user credentials are used in development. The module
-is not yet runnable or validated. The offline compatibility gate has passed.
+has a working local synthetic harness; the interactive iPhone workflow is not yet
+implemented. No real Authy/iPhone compatibility is claimed. The offline
+compatibility gate has passed.
 
 The intended policy rejects traffic outside an explicit endpoint profile. The
 profile must establish host, port, exact path, method, and request content type.
@@ -59,8 +61,35 @@ python3.14 -m venv .capture-venv
 .capture-venv/bin/mitmdump --version
 ```
 
-`bootstrap.lock` pins pip and setuptools; both passed dependency auditing. Native
-TLS, shutdown, client restriction, IPC, and cleanup tests remain to be implemented.
+`bootstrap.lock` pins pip and setuptools; both passed dependency auditing.
+`audit_environment.py` audits the installed graph and fails on findings or any
+skip other than the explicitly documented unreleased mitmproxy package.
+
+## Executed synthetic integration tests
+
+31 tests passed locally on the Mac above. The harness uses actual Python TLS
+servers on loopback and a separate mitmdump-engine process, not mocked TLS hooks.
+It covers matching CONNECT/SNI/Host, substituted SNI rejected before an upstream
+connection, lookalike hosts, Basic proxy authentication, client IP restrictions,
+path/type restrictions, plaintext HTTP rejection, and invalid upstream certificates.
+
+Four public encrypted records pass through unchanged, return over bounded IPC,
+and are decrypted only after the worker is stopped and reaped. The resulting
+encrypted output passes both official Proton importers. Other checks exercise
+timeout failure, SIGINT/SIGTERM, worker SIGKILL, distinct session CAs, certificate
+files without private keys, private file modes, and ignored TLS-key-logging and
+Python import environment variables. No account data was found in session files.
+This bounded inspection is not a system-wide absence-of-traces proof.
+
+```sh
+PYTHONPATH=capture:src .venv/bin/python -m pytest -q capture/tests
+.venv/bin/python capture/audit_environment.py .capture-venv/bin/python
+```
+
+The parent deletes only its newly created session directory. If the parent is
+killed or cleanup fails, CA material may remain; deletion is not physical erasure.
+No RAM volume or iPhone trust-removal verification is implemented. Interactive
+capture, explicit source provenance, and final CI evidence remain in progress.
 
 Sources:
 

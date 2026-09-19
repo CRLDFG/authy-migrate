@@ -1,0 +1,183 @@
+"""Private mitmdump engine worker. Configuration arrives only through stdin."""
+import asyncio
+import json
+import logging
+import os
+from pathlib import Path
+import signal
+import struct
+import sys
+
+# -I excludes ambient import paths. Only this reviewed checkout is added.
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT.parent / "src"))
+from policy import CaptureError, Endpoint, MAX_BODY, encrypted_record
+from authy_migrate.authy import parse_authy
+from mitmproxy import http, options
+from mitmproxy.tools.dump import DumpMaster
+
+
+def send(kind, **values):
+    payload = json.dumps({"type": kind, **values}, separators=(",", ":")).encode()
+    if len(payload) > MAX_BODY:
+        raise CaptureError("IPC message exceeds limit.")
+    sys.stdout.buffer.write(struct.pack("!I", len(payload)) + payload)
+    sys.stdout.buffer.flush()
+
+
+class Capture:
+    def __init__(self, master, endpoint):
+        self.master, self.endpoint = master, endpoint
+        self.tunnels = set()
+        self.denied = set()
+        self.failed = False
+        self.count = 0
+        self.total_bytes = 0
+        self.total_iterations = 0
+        self.clients = set()
+
+    def client_connected(self, client):
+        if not self.endpoint.client_allowed(client.peername[0]) or len(self.clients) >= 8:
+            client.error = "Client not permitted."
+        else:
+            self.clients.add(client.id)
+
+    def client_disconnected(self, client):
+        self.tunnels.discard(client.id)
+        self.denied.discard(client.id)
+        self.clients.discard(client.id)
+
+    def http_connect(self, flow):
+        e = self.endpoint
+        # Built-in ProxyAuth runs first; never override its rejection.
+        if flow.response is not None:
+            return
+        if (flow.request.host != e.host or flow.request.port != e.port
+                or flow.request.authority != f"{e.host}:{e.port}"
+                or flow.request.headers.get_all("host") != [f"{e.host}:{e.port}"]):
+            flow.response = http.Response.make(403, b"Endpoint not permitted.")
+            return
+        self.tunnels.add(flow.client_conn.id)
+
+    def tls_clienthello(self, data):
+        if (data.context.client.id not in self.tunnels
+                or data.client_hello.sni != self.endpoint.host):
+            self.denied.add(data.context.client.id)
+            data.establish_server_tls_first = False
+
+    def tls_start_client(self, data):
+        # Runs after the engine's TLS configuration hook, before its handshake.
+        if data.context.client.id in self.denied:
+            data.ssl_conn = None
+
+    def requestheaders(self, flow):
+        e = self.endpoint
+        if flow.response is not None:
+            return
+        try:
+            allowed = (flow.client_conn.id in self.tunnels
+                       and flow.client_conn.sni == e.host
+                       and e.request_allowed(flow.request.method, flow.request.scheme,
+                           flow.request.host, flow.request.port, flow.request.path,
+                           flow.request.headers))
+        except ValueError:
+            allowed = False
+        if not allowed:
+            flow.response = http.Response.make(403, b"Request not permitted.")
+
+    def request(self, flow):
+        if flow.response is not None:
+            return
+        try:
+            flow.metadata["encrypted_record"] = encrypted_record(
+                flow.request.raw_content, parse_authy)
+        except CaptureError:
+            flow.response = http.Response.make(422, b"Invalid encrypted record.")
+            self.failed = True
+
+    def response(self, flow):
+        record = flow.metadata.pop("encrypted_record", None)
+        if record is None:
+            return
+        if not 200 <= flow.response.status_code < 300:
+            self.failed = True
+            return
+        self.count += 1
+        self.total_bytes += len(json.dumps(record))
+        self.total_iterations += int(record["key_derivation_iterations"])
+        if (self.count > 1000 or self.total_bytes > 8 * 1024 * 1024
+                or self.total_iterations > 10_000_000):
+            self.failed = True
+            self.master.shutdown()
+            return
+        send("record", record=record)
+
+    def error(self, flow):
+        self.failed = True
+
+    async def running(self):
+        server = self.master.addons.get("proxyserver")
+        for _ in range(100):
+            addresses = server.listen_addrs()
+            if addresses:
+                send("ready", port=addresses[0][1])
+                return
+            await asyncio.sleep(.05)
+        self.failed = True
+        self.master.shutdown()
+
+
+async def run(config):
+    required = {"endpoint", "confdir", "listen_host", "proxy_auth", "timeout"}
+    if set(config) - required - {"upstream_ca"} or not required <= config.keys():
+        raise CaptureError("Invalid worker configuration.")
+    endpoint = Endpoint(**config["endpoint"])
+    if (type(config["timeout"]) is not int or not 1 <= config["timeout"] <= 300
+            or config["listen_host"] not in ("127.0.0.1", endpoint.client_ip)
+            or type(config["proxy_auth"]) is not str
+            or not 20 <= len(config["proxy_auth"]) <= 256
+            or config["proxy_auth"].count(":") != 1):
+        raise CaptureError("Invalid session bounds or authentication.")
+    directory = Path(config["confdir"])
+    if not directory.is_dir() or list(directory.iterdir()):
+        raise CaptureError("Capture requires a fresh private directory.")
+    os.umask(0o077)
+    logging.disable(logging.CRITICAL)
+    opts = options.Options(confdir=str(directory), listen_host=config["listen_host"],
+                           listen_port=0, mode=["regular"], ssl_insecure=False)
+    master = DumpMaster(opts, with_termlog=False, with_dumper=False)
+    opts.update(proxyauth=config["proxy_auth"], connection_strategy="lazy",
+                body_size_limit=str(MAX_BODY), onboarding=False,
+                command_history=False, rawtcp=False, http2=False, http3=False,
+                scripts=[], save_stream_file=None, hardump="",
+                ssl_verify_upstream_trusted_ca=config.get("upstream_ca"),
+                allow_hosts=[rf"^{endpoint.host.replace('.', '[.]')}:{endpoint.port}$"])
+    capture = Capture(master, endpoint)
+    master.addons.add(capture)
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, master.shutdown)
+    def timeout():
+        capture.failed = True
+        master.shutdown()
+    timer = loop.call_later(config["timeout"], timeout)
+    try:
+        await master.run()
+    finally:
+        timer.cancel()
+    send("done", ok=not capture.failed)
+
+
+if __name__ == "__main__":
+    try:
+        raw = sys.stdin.buffer.read(8193)
+        if len(raw) > 8192:
+            raise CaptureError("Configuration exceeds limit.")
+        asyncio.run(run(json.loads(raw)))
+    except BaseException:
+        # Neither tracebacks nor TLS/parser errors cross the process boundary.
+        try:
+            send("failed")
+        finally:
+            sys.exit(1)
