@@ -1,0 +1,5 @@
+"account_type","unique_id","name","issuer","algorithm","digits","period","encrypted_seed","salt","iv","key_derivation_iterations"
+"authenticator","public-1","demo@example.invalid","Example","SHA1","6","30","B1Oe0jmkSnSLzJ3yUmTkpNVutZOwxeEb4LoVRGI9lMn4+ncONUVqtlvXJ8C6bjY5","PUBLIC synthetic salt 0, é","01010101010101010101010101010101","100000"
+"authenticator","public-2","élève+test@example.invalid","Démo & Co","SHA256","8","15","QkSsD+dK2I7UCrAvzrc07vNEVwNNwi0gPIyFdaPxRomlAIHTzdZci0P1mDfSKPZRfOPdN6bVuMYp+g4rtkbfgh4i3+7cLDinDzetbmSj25M=","PUBLIC synthetic salt 1, é","02020202020202020202020202020202","132000"
+"authenticator","public-3","demo@example.invalid","Example","SHA512","8","60","ih86lKXTgKnzDjUx9SgVwN3BKKITnoTwDxLf3s7R3l5L36miFhLkZnn7XchI21XwKyTYpUJNCzX/J9erf7l2GwWpBu2Jyo9F54G3MKCTj9E=","PUBLIC synthetic salt 2, é","03030303030303030303030303030303","70000"
+"authenticator","public-4","demo@example.invalid","Example","SHA1","6","30","XOqExiIqDC8b95a5zbavpZOg+kAWfhMRQQ+jtfvKJQ3W1Xis0vXY1l3EP3qlA5rE","PUBLIC synthetic salt 3, é","04040404040404040404040404040404","100000"

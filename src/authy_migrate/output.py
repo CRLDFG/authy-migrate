@@ -8,9 +8,11 @@ from .core import MAX_ARCHIVE_BYTES, ValidationError
 def write_encrypted(path: Path, archive: bytes):
     if type(archive) is not bytes or not 1 <= len(archive) <= MAX_ARCHIVE_BYTES:
         raise ValidationError("Invalid archive size.")
-    # Windows ACL review is pending. Fail closed instead of claiming chmod is an ACL.
+    if os.name == "nt":
+        from .windows_output import write_windows
+        return write_windows(path, archive)
     if os.name != "posix":
-        raise ValidationError("Output permissions are not yet validated on this platform.")
+        raise ValidationError("Unsupported output platform.")
     fd, temporary = tempfile.mkstemp(prefix=".authy-migrate-", dir=path.parent)
     try:
         with os.fdopen(fd, "wb") as stream:

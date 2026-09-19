@@ -1,0 +1,57 @@
+{
+  "authenticator_tokens": [
+    {
+      "account_type": "authenticator",
+      "unique_id": "public-1",
+      "name": "demo@example.invalid",
+      "issuer": "Example",
+      "algorithm": "SHA1",
+      "digits": 6,
+      "period": 30,
+      "encrypted_seed": "B1Oe0jmkSnSLzJ3yUmTkpNVutZOwxeEb4LoVRGI9lMn4+ncONUVqtlvXJ8C6bjY5",
+      "salt": "PUBLIC synthetic salt 0, é",
+      "unique_iv": "01010101010101010101010101010101",
+      "key_derivation_iterations": 100000
+    },
+    {
+      "account_type": "authenticator",
+      "unique_id": "public-2",
+      "name": "élève+test@example.invalid",
+      "issuer": "Démo & Co",
+      "algorithm": "SHA256",
+      "digits": 8,
+      "period": 15,
+      "encrypted_seed": "QkSsD+dK2I7UCrAvzrc07vNEVwNNwi0gPIyFdaPxRomlAIHTzdZci0P1mDfSKPZRfOPdN6bVuMYp+g4rtkbfgh4i3+7cLDinDzetbmSj25M=",
+      "salt": "PUBLIC synthetic salt 1, é",
+      "unique_iv": "02020202020202020202020202020202",
+      "key_derivation_iterations": 132000
+    },
+    {
+      "account_type": "authenticator",
+      "unique_id": "public-3",
+      "name": "demo@example.invalid",
+      "issuer": "Example",
+      "algorithm": "SHA512",
+      "digits": 8,
+      "period": 60,
+      "encrypted_seed": "ih86lKXTgKnzDjUx9SgVwN3BKKITnoTwDxLf3s7R3l5L36miFhLkZnn7XchI21XwKyTYpUJNCzX/J9erf7l2GwWpBu2Jyo9F54G3MKCTj9E=",
+      "salt": "PUBLIC synthetic salt 2, é",
+      "unique_iv": "03030303030303030303030303030303",
+      "key_derivation_iterations": 70000
+    },
+    {
+      "account_type": "authenticator",
+      "unique_id": "public-4",
+      "name": "demo@example.invalid",
+      "issuer": "Example",
+      "algorithm": "SHA1",
+      "digits": 6,
+      "period": 30,
+      "encrypted_seed": "XOqExiIqDC8b95a5zbavpZOg+kAWfhMRQQ+jtfvKJQ3W1Xis0vXY1l3EP3qlA5rE",
+      "salt": "PUBLIC synthetic salt 3, é",
+      "unique_iv": "04040404040404040404040404040404",
+      "key_derivation_iterations": 100000
+    }
+  ],
+  "authy_tokens": []
+}

@@ -1,0 +1,86 @@
+"""Strict endpoint and encrypted-record policy. No proxy imports or I/O."""
+from dataclasses import dataclass
+import ipaddress
+import json
+import re
+from urllib.parse import parse_qsl, urlsplit
+
+MAX_BODY = 65536
+
+
+class CaptureError(ValueError):
+    """Fixed diagnostics only; never include traffic or account metadata."""
+
+
+@dataclass(frozen=True)
+class Endpoint:
+    host: str
+    port: int
+    path: str
+    client_ip: str
+
+    def __post_init__(self):
+        if (type(self.host) is not str or len(self.host) > 253
+                or not re.fullmatch(r"[a-z0-9]+(?:[.-][a-z0-9]+)*", self.host)
+                or type(self.port) is not int or not 1 <= self.port <= 65535
+                or type(self.path) is not str or len(self.path) > 512
+                or not re.fullmatch(r"/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+", self.path)):
+            raise CaptureError("Invalid explicit endpoint profile.")
+        try:
+            ipaddress.ip_address(self.client_ip)
+        except ValueError:
+            raise CaptureError("Invalid client IP restriction.") from None
+
+    def client_allowed(self, address):
+        try:
+            return ipaddress.ip_address(address) == ipaddress.ip_address(self.client_ip)
+        except ValueError:
+            return False
+
+    def authority_allowed(self, authority):
+        return authority == f"{self.host}:{self.port}" or (
+            self.port == 443 and authority == self.host)
+
+    def request_allowed(self, method, scheme, host, port, target, headers):
+        parsed = urlsplit(target)
+        authorities = [[f"{self.host}:{self.port}"]]
+        if self.port == 443:
+            authorities.append([self.host])
+        return (method == "POST" and scheme == "https" and host == self.host
+                and port == self.port and parsed.path == self.path
+                and not parsed.scheme and not parsed.netloc and not parsed.query
+                and not parsed.fragment and target == self.path
+                and headers.get_all("host") in authorities
+                and headers.get_all("content-type") in (
+                    ["application/x-www-form-urlencoded"],
+                    ["application/x-www-form-urlencoded; charset=utf-8"])
+                and not headers.get_all("content-encoding"))
+
+
+def encrypted_record(body, validate):
+    """Validate before IPC; `validate` is the offline parser, with no password."""
+    if type(body) is not bytes or not 1 <= len(body) <= MAX_BODY:
+        raise CaptureError("Invalid capture body size.")
+    try:
+        text = body.decode("ascii")
+        if re.search(r"%(?![0-9A-Fa-f]{2})", text):
+            raise ValueError()
+        pairs = parse_qsl(text, keep_blank_values=True, strict_parsing=True,
+                          encoding="utf-8", errors="strict", max_num_fields=16)
+        fields = dict(pairs)
+        if len(fields) != len(pairs):
+            raise ValueError()
+        required = {"token_id", "account_type", "name", "encrypted_seed", "salt",
+                    "unique_iv", "key_derivation_iterations"}
+        optional = {"issuer", "algorithm", "digits", "period", "original_name"}
+        if not required <= fields.keys() or fields.keys() - required - optional:
+            raise ValueError()
+        if "original_name" in fields:
+            if len(fields.pop("original_name")) > 256:
+                raise ValueError()
+        fields["unique_id"] = fields.pop("token_id")
+        data = json.dumps({"authenticator_tokens": [fields]}, ensure_ascii=True).encode()
+        validate(data, "authy-json")
+        return fields
+    except (ValueError, UnicodeError):
+        raise CaptureError("Invalid encrypted capture record.") from None

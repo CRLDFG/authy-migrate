@@ -1,39 +1,47 @@
 # authy-migrate
 
-Prototype **synthétique uniquement** de compatibilité avec les exports chiffrés
-Proton Authenticator. Il ne migre pas encore un export Authy réel.
+An **experimental offline converter** from encrypted Authy exports to Proton
+Authenticator's native encrypted format. Development and CI use synthetic data
+exclusively; no real Twilio export has been certified.
 
-Le cœur hors ligne crée en mémoire quatre TOTP publics de démonstration et les
-chiffre au format Proton. Aucun proxy, certificat, compte Proton, service cloud,
-upload ou télémétrie n'est requis. Ne jamais utiliser ces seeds sur de vrais comptes.
+The CSV/JSON adapters reject missing or contradictory parameters. Proton output
+has been verified with two official importers and Proton 1.4.3 (6) on a Mac.
+No proxy, certificate, Proton account, or cloud service is required.
 
-## Essayer localement
+Read the [conversion workflow and supported formats](docs/authy-input.md).
+The optional [capture module](capture/README.md) runs separately and remains
+experimental; its [local workflow](capture/WORKFLOW.md) has synthetic validation
+only. It is not required for file conversion.
+The conversion path never deliberately writes decrypted seeds in plaintext.
+Users must verify source parameters and resulting codes locally.
 
-Python 3.12+ avec support Argon2id dans cryptography et Rust 1.92+ pour le test
-indépendant. Les commandes d'installation nécessitent Internet ; la conversion non.
+## Try it locally
+
+Python 3.12+ with Argon2id support in cryptography; Rust 1.92+ for the independent
+reference checks. Installation needs Internet access; conversion does not.
 
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install --require-hashes -r requirements.lock
-.venv/bin/python -m pip install --no-deps .
+.venv/bin/python -m pip install --require-hashes -r requirements-build.lock
+.venv/bin/python -m pip install --no-deps --no-build-isolation .
 .venv/bin/authy-migrate demo demo.proton.json
 ```
 
-La commande demande deux fois une phrase de passe d'archive de 16 caractères
-minimum. Utiliser une phrase longue et imprévisible ; la longueur seule ne garantit
-pas sa force. Ce n'est **pas** le mot de passe du compte Proton ni celui d'Authy.
-Les espaces et caractères Unicode sont conservés exactement. Aucun mot de passe
-n'est accepté en argument ou variable d'environnement. Un terminal interactif est
-obligatoire. La destination doit être nouvelle et dans un dossier privé de confiance.
+The command asks twice for an archive passphrase of at least 16 characters. Use a
+long, unpredictable passphrase; length alone does not ensure strength. This is
+**not** your Proton account password or Authy backup password. Whitespace and
+Unicode are preserved exactly. Password arguments and environment variables are
+not supported. An interactive terminal is required. Choose a new destination
+inside a trusted private directory.
 
-L'écriture POSIX utilise un fichier temporaire chiffré en 0600, fsync, puis un lien
-atomique sans écrasement. Windows : cœur testable, publication de fichier refusée
-jusqu'à implémentation et validation des ACL. Le prototype n'annonce donc pas de
-support Windows complet. Le cœur et les deux importeurs officiels passent la CI macOS/Linux/Windows.
-L’import dans l’application a été vérifié sur ce Mac avec Proton 1.4.3 (6).
-Ces essais ne constituent pas une annonce de support de migration Authy réelle.
+POSIX output publishes an encrypted 0600 file without overwriting an existing
+file. The [Windows layer](docs/windows-output.md) creates a protected DACL before
+writing, then publishes without replacement. Dedicated Windows CI tests passed;
+see the [adapter validation record](docs/adapter-validation.md). Universal Authy
+export compatibility is not claimed.
 
-## Vérifier
+## Verify
 
 ```sh
 .venv/bin/python -m pip install -r requirements-dev.lock
@@ -42,14 +50,15 @@ cargo build --locked --manifest-path reference/legacy/Cargo.toml
 .venv/bin/python -m pytest -q
 ```
 
-Sans un binaire Rust, le test indépendant correspondant est explicitement ignoré en local (échec en CI). La CI construit
-les deux binaires avant les tests. L'importeur reçoit uniquement le fichier chiffré par
-stdin ; il connaît la phrase de passe publique du jeu synthétique. Il ne convient
-pas aux données réelles et ne doit pas recevoir un diagnostic utilisateur brut.
+A missing Rust binary explicitly skips its reference check locally and fails CI.
+CI builds both binaries before testing. Each importer receives only the encrypted
+archive through stdin and knows the public synthetic passphrase. The harness is
+not suitable for real account data or raw user diagnostics.
 
-Voir [résultats](docs/validation.md), [protocole et sources](docs/protocol.md),
-[décision d'architecture](docs/ADR-001.md), [modèle de menace](docs/threat-model.md),
-[test manuel](docs/manual-test.md), [roadmap](docs/roadmap.md),
-[attributions](NOTICE.md) et [sécurité](SECURITY.md).
+Read the [validation evidence](docs/validation.md), [protocol and sources](docs/protocol.md),
+[architecture decision](docs/ADR-001.md), [threat model](docs/threat-model.md),
+[manual test procedure](docs/manual-test.md), [roadmap](docs/roadmap.md),
+[project brief](docs/project-brief.md), [attribution](NOTICE.md), and
+[security policy](SECURITY.md).
 
-GPL-3.0-only. Aucune revendication d'audit externe ni de compatibilité universelle.
+GPL-3.0-only. No independent security audit or universal compatibility is claimed.

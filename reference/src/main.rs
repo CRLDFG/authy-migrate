@@ -1,12 +1,27 @@
 // Synthetic-only harness. Never accepts a password or real account data.
 use base64::prelude::*;
-use proton_authenticator::entry::import_entries_with_password;
+use proton_authenticator::entry::{import_authenticator_entries, import_entries_with_password};
 use proton_authenticator::{Algorithm, AuthenticatorEntryContent};
 use std::io::{self, Read};
 
 const PASSWORD: &str = "  Synthétique 🔐 test password  ";
 
 fn check(input: &str) -> Result<(), ()> {
+    // Investigate the pinned native error path in memory, without printing it.
+    // This deliberately malformed URI contains only the public RFC demo seed.
+    let marker = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+    let malformed = serde_json::json!({"version": 1, "entries": [{
+        "id": "public-error-probe", "content": {
+            "uri": format!("otpauth://totp/Public?secret={marker}&algorithm=INVALID"),
+            "entry_type": "Totp", "name": "Public error probe"
+        }, "note": null
+    }]});
+    let probe = import_authenticator_entries(&malformed.to_string()).map_err(|_| ())?;
+    if !probe.entries.is_empty() || probe.errors.len() != 1
+        || !probe.errors[0].message.contains(marker)
+    {
+        return Err(());
+    }
     let result = import_entries_with_password(input, PASSWORD).map_err(|_| ())?;
     if !result.errors.is_empty() || result.entries.len() != 4 {
         return Err(());
@@ -97,7 +112,7 @@ fn main() {
         && check(&input).is_ok();
     if ok {
         println!(
-            "PASS: official importer, 4 entries, all fields, distinct IDs, wrong passwords, tampering"
+            "PASS: official importer, 4 entries, all fields, distinct IDs, wrong passwords, tampering, native error probe"
         );
     } else {
         eprintln!("FAIL: synthetic compatibility check (details redacted)");

@@ -1,0 +1,3 @@
+# Parameter fixtures bind exact source bytes; preserve them on every platform.
+tests/fixtures/* -text
+tests/fixtures/*.csv whitespace=cr-at-eol
