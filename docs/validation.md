@@ -4,7 +4,7 @@ Exécuté localement : macOS arm64, Python 3.14.2, cryptography 50.0.1,
 Rust/Cargo 1.92.0, importeur Proton 2.1.0 au commit épinglé dans Cargo.toml.
 
 `cargo build --locked --manifest-path reference/Cargo.toml` : succès.
-`python -m pytest -q` : **25 tests réussis**, dont le programme Rust indépendant.
+`python -m pytest -q` : **26 tests réussis**, dont les deux programmes Rust indépendants (cœurs 2.1.0 et 1.3.0).
 
 Le harness vérifie quatre entrées complètes : secrets, labels Unicode, issuer,
 SHA1/SHA256/SHA512, 6/8 chiffres, périodes 15/30/60, UUID distincts pour doublons
@@ -23,7 +23,9 @@ chiffré n'a pas été modifié pour contourner le test.
 Audit runtime Python : aucune vulnérabilité connue signalée lors de l'exécution.
 Audit outillage Python : aucune vulnérabilité connue signalée. Audit Rust : 192
 dépendances, aucune vulnérabilité signalée (base RustSec de 1251 avis). La CI
-multiplateforme est suivie dans la PR.
+multiplateforme est verte au commit `7752b09` : macOS 25 réussis, Linux 25
+réussis, Windows 22 réussis / 3 tests POSIX ignorés. La CLI installée est testée
+sur les trois OS. [Exécution](https://github.com/CRLDFG/authy-migrate/actions/runs/35437705736).
 Les locks enregistrent les versions exactes et hashes disponibles.
 
 Non prouvé : import dans un build distribué Proton, comparaison des codes dans
@@ -31,3 +33,8 @@ l'application, chaîne de logs iOS, migration Authy réelle, compatibilité des 
 Twilio, sécurité de capture TLS, ACL Windows, nettoyage après panne, effacement
 physique. Les tests open/socket sont un contrôle de régression ciblé, pas une
 observation exhaustive des appels système. Aucun compte réel n'a été traité.
+
+Vérification complémentaire du cœur 1.3.0 déclaré par le tag iOS 1.4.3 :
+`cargo build --locked --manifest-path reference/legacy/Cargo.toml`, puis même
+harness sur la même archive synthétique : succès. Audit du verrou associé :
+187 dépendances, aucune vulnérabilité signalée par la base locale RustSec.

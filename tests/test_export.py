@@ -114,8 +114,12 @@ def test_cli_noninteractive_no_file(tmp_path):
     assert 'Traceback' not in result.stderr
 
 
-def test_official_importer():
-    binary = Path('reference/target/debug/authy-migrate-reference-check')
+@pytest.mark.parametrize('binary_path', [
+    'reference/target/debug/authy-migrate-reference-check',
+    'reference/legacy/target/debug/authy-migrate-legacy-check',
+])
+def test_official_importer(binary_path):
+    binary = Path(binary_path)
     if os.name == 'nt':
         binary = binary.with_suffix('.exe')
     if not binary.exists():

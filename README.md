@@ -37,10 +37,11 @@ annonce de support ; seul macOS a été exécuté localement.
 ```sh
 .venv/bin/python -m pip install -r requirements-dev.lock
 cargo build --locked --manifest-path reference/Cargo.toml
+cargo build --locked --manifest-path reference/legacy/Cargo.toml
 .venv/bin/python -m pytest -q
 ```
 
-Sans le binaire Rust, le test indépendant est explicitement ignoré. La CI construit
+Sans un binaire Rust, le test indépendant correspondant est explicitement ignoré en local (échec en CI). La CI construit
 ce binaire avant les tests. L'importeur reçoit uniquement le fichier chiffré par
 stdin ; il connaît la phrase de passe publique du jeu synthétique. Il ne convient
 pas aux données réelles et ne doit pas recevoir un diagnostic utilisateur brut.
