@@ -5,6 +5,7 @@ import getpass
 import ipaddress
 import platform
 import json
+import os
 from pathlib import Path
 import select
 import sys
@@ -31,6 +32,43 @@ def load_profile(path):
             or type(profile['version']) is not int or profile['version'] != 1):
         raise CaptureError('Invalid explicit capture profile.')
     # Endpoint and provenance are independently validated by Session and worker.
+    return profile
+
+
+def preflight(args):
+    """Validate local configuration without starting a proxy or asking for secrets."""
+    if sys.platform != 'darwin' or platform.machine() != 'arm64':
+        raise CaptureError('Capture is currently validated only on macOS arm64.')
+    profile = load_profile(args.profile)
+    Endpoint(profile['host'], profile['port'], profile['path'], args.client_ip)
+    from authy_migrate.authy import validate_capture_provenance
+    from version import ENGINE_REVISION
+    validate_capture_provenance(dict(profile, engine_revision=ENGINE_REVISION))
+    if profile['host'].endswith('.invalid') or 'REPLACE' in profile['path']:
+        raise CaptureError('Replace the example profile with an independently reviewed endpoint.')
+    try:
+        addresses = [ipaddress.ip_address(value) for value in (args.listen_ip, args.client_ip)]
+    except ValueError:
+        raise CaptureError('Invalid local network address.') from None
+    if any(not address.is_private or address.is_unspecified or address.is_multicast
+           for address in addresses):
+        raise CaptureError('Select explicit private local addresses.')
+    if addresses[0].version != addresses[1].version:
+        raise CaptureError('Mac and iPhone addresses must use the same IP version.')
+    if not 1 <= args.expected_records <= 1000 or not 1 <= args.timeout <= 300:
+        raise CaptureError('Invalid expected record count or session timeout.')
+    if not args.capture_python.is_file() or not os.access(args.capture_python, os.X_OK):
+        raise CaptureError('The separate capture Python executable is unavailable.')
+    paths = (args.output, args.certificate, args.parameters)
+    for path in paths:
+        if path.exists() or path.is_symlink():
+            raise CaptureError('Select new output, public-certificate, and parameter paths.')
+        if not path.parent.is_dir():
+            raise CaptureError('Create the private output directory before starting capture.')
+        if path.parent.stat().st_mode & 0o077:
+            raise CaptureError('Output directories must be accessible only to their owner (mode 0700).')
+    if len({str(path.resolve()) for path in paths}) != 3:
+        raise CaptureError('Output paths must be distinct.')
     return profile
 
 
@@ -66,19 +104,7 @@ def run(args):
         raise CaptureError('Capture is currently validated only on macOS arm64.')
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         raise CaptureError('Interactive input and output terminals are required.')
-    profile = load_profile(args.profile)
-    Endpoint(profile['host'], profile['port'], profile['path'], args.client_ip)
-    address = ipaddress.ip_address(args.listen_ip)
-    if not address.is_private or address.is_unspecified:
-        raise CaptureError('Select an explicit private local listening address.')
-    if not 1 <= args.expected_records <= 1000:
-        raise CaptureError('An expected record count from 1 to 1000 is required.')
-    # Refuse known collisions before asking the user to configure the phone.
-    for path in (args.output, args.certificate, args.parameters):
-        if path.exists() or path.is_symlink():
-            raise CaptureError('Select new output, public-certificate, and parameter paths.')
-    if len({str(p.absolute()) for p in (args.output,args.certificate,args.parameters)}) != 3:
-        raise CaptureError('Output paths must be distinct.')
+    profile = preflight(args)
     print('Experimental capture: only synthetic TLS has been validated. Verify the profile locally.')
     print('Use a trusted private network. Proxy Basic authentication does not encrypt its credentials.')
     print('Keep Authy and recovery methods. This operation does not establish a complete migration.')
@@ -131,13 +157,20 @@ def main():
     parser.add_argument('--listen-ip', required=True)
     parser.add_argument('--client-ip', required=True)
     parser.add_argument('--expected-records', type=int, required=True)
+    parser.add_argument('--check', action='store_true',
+                        help='Check local configuration without capture, passwords, or file creation.')
     parser.add_argument('--certificate', type=Path, required=True)
     parser.add_argument('--parameters', type=Path, required=True)
     parser.add_argument('--timeout', type=int, default=180, choices=range(1,301), metavar='1..300')
     parser.add_argument('output', type=Path)
     args = parser.parse_args()
     try:
-        run(args)
+        if args.check:
+            preflight(args)
+            print('Local configuration checks passed. No proxy started or files created.')
+            print('This does not verify Authy compatibility, network reachability, or dependency integrity.')
+        else:
+            run(args)
     except (CaptureError, ValidationError) as error:
         print(str(error),file=sys.stderr)
         return 1

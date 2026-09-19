@@ -6,6 +6,10 @@ import re
 from urllib.parse import parse_qsl, urlsplit
 
 MAX_BODY = 65536
+# Historical Authy POST metadata, excluded from the encrypted-record IPC payload.
+# Source: https://velvetcache.org/2023/05/12/the-authy-backup-system/
+# This allowlist is not a claim about the unobserved iOS 28.6.1 schema.
+TRANSPORT_FIELDS = {"api_key": 512, "locale": 32, "password_timestamp": 32, "logo": 1024}
 
 
 class CaptureError(ValueError):
@@ -66,15 +70,21 @@ def encrypted_record(body, validate):
         if re.search(r"%(?![0-9A-Fa-f]{2})", text):
             raise ValueError()
         pairs = parse_qsl(text, keep_blank_values=True, strict_parsing=True,
-                          encoding="utf-8", errors="strict", max_num_fields=16)
+                          encoding="utf-8", errors="strict", max_num_fields=24)
         fields = dict(pairs)
         if len(fields) != len(pairs):
             raise ValueError()
         required = {"token_id", "account_type", "name", "encrypted_seed", "salt",
                     "unique_iv", "key_derivation_iterations"}
         optional = {"issuer", "algorithm", "digits", "period", "original_name"}
-        if not required <= fields.keys() or fields.keys() - required - optional:
+        if (not required <= fields.keys()
+                or fields.keys() - required - optional - TRANSPORT_FIELDS.keys()):
             raise ValueError()
+        for key, limit in TRANSPORT_FIELDS.items():
+            if key in fields:
+                value = fields.pop(key)
+                if len(value) > limit or any(ord(char) < 32 or ord(char) == 127 for char in value):
+                    raise ValueError()
         if "original_name" in fields:
             if len(fields.pop("original_name")) > 256:
                 raise ValueError()

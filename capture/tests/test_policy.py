@@ -28,3 +28,31 @@ def test_missing_iv_or_kdf_not_inferred():
     for field in ('unique_iv','key_derivation_iterations'):
         incomplete={key:value for key,value in record.items() if key!=field}
         with pytest.raises(CaptureError):encrypted_record(urlencode(incomplete).encode(),parse_authy)
+
+
+def synthetic_form():
+    source = Path(__file__).resolve().parents[2] / 'tests/fixtures/authy-synthetic.json'
+    record = json.loads(source.read_bytes())['authenticator_tokens'][0]
+    record['token_id'] = record.pop('unique_id')
+    return record
+
+
+def test_historical_transport_metadata_is_never_forwarded():
+    record = synthetic_form()
+    expected = encrypted_record(urlencode(record).encode(), parse_authy)
+    record.update(api_key='public-test-api-key', locale='en-US',
+                  password_timestamp='1700000000', logo='Public test logo')
+    actual = encrypted_record(urlencode(record).encode(), parse_authy)
+    assert actual == expected
+    assert 'public-test-api-key' not in json.dumps(actual)
+
+
+@pytest.mark.parametrize('extra', [
+    [('api_key', 'one'), ('api_key', 'two')],
+    [('api_key', 'x' * 513)], [('locale', 'en\nUS')],
+    [('unreviewed_field', 'value')],
+])
+def test_transport_metadata_rejects_duplicates_bounds_and_unknown_fields(extra):
+    body = urlencode(list(synthetic_form().items()) + extra).encode()
+    with pytest.raises(CaptureError, match='Invalid encrypted capture record'):
+        encrypted_record(body, parse_authy)

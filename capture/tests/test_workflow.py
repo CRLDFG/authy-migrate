@@ -98,3 +98,53 @@ def test_enter_drains_pending_frames_then_reaps(upstream,monkeypatch):
             captured=cli.collect_interactively(session)
         assert session.process.poll()==0
         assert len(json.loads(captured)['authenticator_tokens'])==4
+
+
+def test_preflight_has_no_capture_or_password_side_effects(tmp_path, monkeypatch):
+    args = arguments(tmp_path, (SimpleNamespace(server_port=443), None))
+    monkeypatch.setattr(cli, 'Session', lambda *a, **k: pytest.fail('Proxy started'))
+    monkeypatch.setattr(cli.getpass, 'getpass', lambda *a: pytest.fail('Secret requested'))
+    before = set(tmp_path.iterdir())
+    assert cli.preflight(args)['app_version'] == 'synthetic/v1'
+    assert set(tmp_path.iterdir()) == before
+
+
+@pytest.mark.parametrize('failure', ['placeholder', 'existing', 'public_directory', 'missing_python', 'alias'])
+def test_preflight_rejects_unready_local_setup(tmp_path, failure):
+    args = arguments(tmp_path, (SimpleNamespace(server_port=443), None))
+    if failure == 'placeholder':
+        profile = json.loads(args.profile.read_bytes())
+        profile['host'] = 'verified-host.example.invalid'
+        args.profile.write_text(json.dumps(profile))
+    elif failure == 'existing':
+        args.output.write_bytes(b'keep this file')
+    elif failure == 'public_directory':
+        tmp_path.chmod(0o755)
+    elif failure == 'missing_python':
+        args.capture_python = tmp_path / 'missing-python'
+    else:
+        alias = tmp_path / 'alias'
+        alias.symlink_to(tmp_path, target_is_directory=True)
+        args.certificate = alias / args.output.name
+    try:
+        with pytest.raises(CaptureError):
+            cli.preflight(args)
+        if failure == 'existing':
+            assert args.output.read_bytes() == b'keep this file'
+    finally:
+        tmp_path.chmod(0o700)
+
+
+def test_check_command_accepts_noninteractive_terminal_without_creating_files(tmp_path):
+    import subprocess
+    args = arguments(tmp_path, (SimpleNamespace(server_port=443), None))
+    before = set(tmp_path.iterdir())
+    command = [str(ROOT / '.venv/bin/python'), '-I', '-B', str(ROOT / 'capture/cli.py'),
+               '--check', '--profile', str(args.profile), '--capture-python', str(PYTHON),
+               '--listen-ip', '127.0.0.1', '--client-ip', '127.0.0.1',
+               '--expected-records', '4', '--certificate', str(args.certificate),
+               '--parameters', str(args.parameters), str(args.output)]
+    result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    assert 'No proxy started or files created' in result.stdout
+    assert set(tmp_path.iterdir()) == before

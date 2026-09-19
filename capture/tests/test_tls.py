@@ -124,6 +124,18 @@ def test_actual_tls_capture_and_reaping(upstream):
     assert upstream[0].bodies==[body()]
 
 
+def test_transport_metadata_preserved_upstream_but_excluded_from_ipc(upstream):
+    payload = body() + b'&api_key=public-test-api-key&locale=en-US&password_timestamp=1700000000&logo=Public'
+    with start(upstream) as session:
+        assert b'200' in request(session, upstream[0].server_port, raw_body=payload)
+        assert session.collect() == 'record'
+        data = session.finish()
+    assert upstream[0].bodies == [payload]
+    assert b'public-test-api-key' not in data
+    record = json.loads(data)['authenticator_tokens'][0]
+    assert not {'api_key', 'locale', 'password_timestamp', 'logo'} & record.keys()
+
+
 @pytest.mark.parametrize('override',[dict(path=PATH+'/extra'),dict(authority='lookalike.invalid'),dict(content_type='text/plain')])
 def test_out_of_scope_http_not_forwarded(upstream,override):
     with start(upstream) as session:
