@@ -1,6 +1,6 @@
 import json
 import pytest
-from policy import diagnose_form, CaptureError
+from policy import diagnose_form, CaptureError, DIAGNOSTIC_STAGES
 from authy_migrate.authy import parse_authy
 from test_tls import upstream, start, request, body
 
@@ -19,8 +19,10 @@ def test_diagnostic_blocks_upstream_and_exports_only_path_and_booleans(upstream)
     assert upstream[0].bodies == []
     assert upstream[0].connections == 0
     assert result['path'] == PATH
-    assert session.diagnostic_status['stages'] == dict(client_connections=1, authy_tunnels=1,
-                                                       tls_requests=1, matching_requests=1)
+    expected = dict.fromkeys(DIAGNOSTIC_STAGES, 0)
+    expected.update(client_connections=1, connect_requests=1, authy_connect_requests=1,
+                    authy_tunnels=1, tls_requests=1, matching_requests=1)
+    assert session.diagnostic_status['stages'] == expected
     assert result['facts']['record_accepted'] is True
     assert all(type(value) is bool for value in result['facts'].values())
     assert b'public-secret-marker' not in json.dumps(result).encode()
@@ -35,6 +37,41 @@ def test_query_is_not_exported_or_accepted_as_capture_compatible(upstream):
     assert result['facts']['has_query'] is True
     assert result['facts']['record_accepted'] is False
     assert 'public-query-secret' not in json.dumps(result)
+    assert upstream[0].connections == 0
+
+
+@pytest.mark.parametrize('case,expected,status', [
+    ('missing_auth', 'proxy_auth_required', b'407'),
+    ('wrong_auth', 'proxy_auth_required', b'407'),
+    ('missing_host', 'connect_host_missing', b'403'),
+    ('wrong_host', 'connect_host_rejected', b'403'),
+    ('other_endpoint', 'connect_other_endpoint', b'403'),
+])
+def test_connect_rejection_reason_without_exposing_headers(upstream, case, expected, status):
+    import base64
+    import socket
+    from test_tls import AUTH
+    port = upstream[0].server_port
+    with start(upstream, diagnostic=True) as session:
+        target = 'localhost' if case != 'other_endpoint' else 'other.invalid'
+        headers = []
+        if case != 'missing_host':
+            value = 'private-host.invalid' if case == 'wrong_host' else f'{target}:{port}'
+            headers.append(f'Host: {value}')
+        if case != 'missing_auth':
+            value = 'private-user:private-password' if case == 'wrong_auth' else AUTH
+            headers.append('Proxy-Authorization: Basic ' + base64.b64encode(value.encode()).decode())
+        raw = f'CONNECT {target}:{port} HTTP/1.1\r\n' + '\r\n'.join(headers) + '\r\n\r\n'
+        with socket.create_connection(('127.0.0.1', session.port), timeout=3) as sock:
+            sock.sendall(raw.encode())
+            assert status in sock.recv(4096)
+        with pytest.raises(CaptureError, match='No update request'):
+            session.finish()
+        stages = session.diagnostic_status['stages']
+        assert stages['connect_requests'] == 1
+        assert stages[expected] == 1
+        assert stages['authy_tunnels'] == 0
+        assert 'private' not in json.dumps(session.diagnostic_status)
     assert upstream[0].connections == 0
 
 

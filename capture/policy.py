@@ -6,6 +6,12 @@ import re
 from urllib.parse import parse_qsl, urlsplit
 
 MAX_BODY = 65536
+DIAGNOSTIC_STAGES = (
+    'client_connections', 'connect_requests', 'authy_connect_requests',
+    'proxy_auth_required', 'connect_other_endpoint', 'connect_authority_rejected',
+    'connect_host_missing', 'connect_host_rejected', 'sni_rejected',
+    'authy_tunnels', 'tls_requests', 'matching_requests',
+)
 # Historical Authy POST metadata, excluded from the encrypted-record IPC payload.
 # Source: https://velvetcache.org/2023/05/12/the-authy-backup-system/
 # This allowlist is not a claim about the unobserved iOS 28.6.1 schema.

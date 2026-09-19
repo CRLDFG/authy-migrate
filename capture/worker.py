@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT.parent / "src"))
 from policy import CaptureError, Endpoint, MAX_BODY, encrypted_record
-from policy import DiagnosticEndpoint, diagnose_form
+from policy import DiagnosticEndpoint, diagnose_form, DIAGNOSTIC_STAGES
 from version import ENGINE_URL, ENGINE_ARCHIVE_SHA256
 from authy_migrate.authy import parse_authy
 from mitmproxy import http, options
@@ -37,7 +37,7 @@ class Capture:
         self.observation = None
         self.timed_out = False
         self.network_error = False
-        self.stages = dict(client_connections=0, authy_tunnels=0, tls_requests=0, matching_requests=0)
+        self.stages = dict.fromkeys(DIAGNOSTIC_STAGES, 0)
         self.tunnels = set()
         self.denied = set()
         self.failed = False
@@ -46,6 +46,9 @@ class Capture:
         self.total_iterations = 0
         self.clients = set()
         self.identifiers = set()
+
+    def count_stage(self, stage):
+        self.stages[stage] = min(1000000, self.stages[stage] + 1)
 
     def client_connected(self, client):
         if not self.endpoint.client_allowed(client.peername[0]) or len(self.clients) >= 8:
@@ -61,12 +64,25 @@ class Capture:
 
     def http_connect(self, flow):
         e = self.endpoint
+        self.count_stage('connect_requests')
+        if flow.request.host == e.host and flow.request.port == e.port:
+            self.count_stage('authy_connect_requests')
         # Built-in ProxyAuth runs first; never override its rejection.
         if flow.response is not None:
+            if flow.response.status_code == 407:
+                self.count_stage('proxy_auth_required')
             return
-        if (flow.request.host != e.host or flow.request.port != e.port
-                or flow.request.authority != f"{e.host}:{e.port}"
-                or flow.request.headers.get_all("host") != [f"{e.host}:{e.port}"]):
+        rejection = None
+        if flow.request.host != e.host or flow.request.port != e.port:
+            rejection = 'connect_other_endpoint'
+        elif flow.request.authority != f'{e.host}:{e.port}':
+            rejection = 'connect_authority_rejected'
+        elif not flow.request.headers.get_all('host'):
+            rejection = 'connect_host_missing'
+        elif flow.request.headers.get_all('host') != [f'{e.host}:{e.port}']:
+            rejection = 'connect_host_rejected'
+        if rejection:
+            self.count_stage(rejection)
             flow.response = http.Response.make(403, b"Endpoint not permitted.")
             return
         self.tunnels.add(flow.client_conn.id)
@@ -76,6 +92,7 @@ class Capture:
         if (data.context.client.id not in self.tunnels
                 or data.client_hello.sni != self.endpoint.host):
             self.denied.add(data.context.client.id)
+            self.count_stage('sni_rejected')
             data.establish_server_tls_first = False
 
     def tls_start_client(self, data):

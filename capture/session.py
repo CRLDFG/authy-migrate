@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import time
 
-from policy import CaptureError, MAX_BODY
+from policy import CaptureError, MAX_BODY, DIAGNOSTIC_STAGES
 from version import ENGINE_REVISION
 
 
@@ -115,7 +115,7 @@ class Session:
             if (self.diagnostic_status is not None
                     or set(message) != {'type', 'stages', 'timed_out', 'network_error'}
                     or type(stages) is not dict
-                    or set(stages) != {'client_connections', 'authy_tunnels', 'tls_requests', 'matching_requests'}
+                    or set(stages) != set(DIAGNOSTIC_STAGES)
                     or any(type(v) is not int or not 0 <= v <= 1000000 for v in stages.values())
                     or type(message['timed_out']) is not bool
                     or type(message['network_error']) is not bool):

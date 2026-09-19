@@ -54,6 +54,16 @@ on a normal worker timeout or protocol error. These contain no hostnames, paths,
 request contents, or account identifiers:
 
 - `client_connections`: accepted connections from the configured iPhone IP.
+- `connect_requests`: parsed HTTP CONNECT requests reaching the policy hook.
+- `authy_connect_requests`: CONNECT requests naming the permitted host/port,
+  counted even before checking proxy authentication.
+- `proxy_auth_required`: HTTP 407 authentication challenges. An initial challenge
+  can be normal; a challenge alone does not prove the password is incorrect.
+- `connect_other_endpoint`: authenticated CONNECT requests for another endpoint.
+- `connect_authority_rejected`: the CONNECT authority did not match exactly.
+- `connect_host_missing` and `connect_host_rejected`: the CONNECT Host header was
+  missing or did not satisfy the strict policy. Values are never exported.
+- `sni_rejected`: the TLS ClientHello failed the tunnel/SNI policy.
 - `authy_tunnels`: CONNECT requests accepted for the permitted Authy endpoint.
 - `tls_requests`: HTTP request headers seen inside those matching TLS tunnels.
 - `matching_requests`: complete requests matching the diagnostic route/filter.
@@ -66,6 +76,14 @@ TLS requests without matches mean traffic was seen but did not match the route,
 method, or content-type filter. These are diagnostic clues, not definitive causes.
 Both the counters and flags may be shared. Timeout or errors still prevent
 publishing an observation file; counters do not prove a successful sync.
+
+If accepted client connections are nonzero but Authy tunnels remain zero, the
+CONNECT counters distinguish an authentication challenge from an endpoint or
+header-policy rejection. Do not infer a missing Authy sync trigger from those
+original four counters alone. Manually opening `https://api.authy.com` in Safari
+can exercise the tunnel and certificate path, but its GET request will still be
+blocked and will never count as an Authy update. This test does not prove that
+Authy's own networking uses the same proxy behavior.
 
 After worker shutdown and private CA cleanup, the command writes
 `observation.private.json`. It contains the first matching account-specific path
