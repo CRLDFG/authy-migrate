@@ -1,5 +1,7 @@
 # Experimental local iPhone workflow
 
+For the current device preparation, see [Authy 28.6.1 readiness](IPHONE-28.6.1.md).
+
 Only synthetic TLS and public records have been tested. This is not a validated
 Authy iPhone release/profile. Do not use a real account in Codex, CI, or a hosted
 environment. A user may evaluate real compatibility locally after reviewing the
@@ -42,6 +44,14 @@ Existing firewall rules may need user review; this application does not alter th
 Choose three new paths in a private directory outside the repository. Existing
 paths are never overwritten. Example addresses below must be replaced with the
 actual local addresses; the directory must already exist:
+
+Create the chosen output directory with owner-only permissions (`mkdir -m 700`),
+or select an existing directory with those permissions. First append `--check`
+to the command below. This checks the local profile, addresses, capture Python
+executable, output collisions, and directory permissions without starting a
+proxy, creating files, or requesting passwords. A passing check does not verify
+the endpoint against Authy, dependency integrity, or network reachability.
+Remove `--check` only when ready for the reviewed local session.
 
 ```sh
 .venv/bin/python -I -B capture/cli.py \

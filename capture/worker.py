@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT.parent / "src"))
 from policy import CaptureError, Endpoint, MAX_BODY, encrypted_record
+from policy import DiagnosticEndpoint, diagnose_form, DIAGNOSTIC_STAGES
 from version import ENGINE_URL, ENGINE_ARCHIVE_SHA256
 from authy_migrate.authy import parse_authy
 from mitmproxy import http, options
@@ -30,8 +31,13 @@ def send(kind, **values):
 
 
 class Capture:
-    def __init__(self, master, endpoint):
+    def __init__(self, master, endpoint, diagnostic=False):
         self.master, self.endpoint = master, endpoint
+        self.diagnostic = diagnostic
+        self.observation = None
+        self.timed_out = False
+        self.network_error = False
+        self.stages = dict.fromkeys(DIAGNOSTIC_STAGES, 0)
         self.tunnels = set()
         self.denied = set()
         self.failed = False
@@ -41,11 +47,15 @@ class Capture:
         self.clients = set()
         self.identifiers = set()
 
+    def count_stage(self, stage):
+        self.stages[stage] = min(1000000, self.stages[stage] + 1)
+
     def client_connected(self, client):
         if not self.endpoint.client_allowed(client.peername[0]) or len(self.clients) >= 8:
             client.error = "Client not permitted."
         else:
             self.clients.add(client.id)
+            self.stages['client_connections'] = min(1000000, self.stages['client_connections'] + 1)
 
     def client_disconnected(self, client):
         self.tunnels.discard(client.id)
@@ -54,20 +64,36 @@ class Capture:
 
     def http_connect(self, flow):
         e = self.endpoint
+        self.count_stage('connect_requests')
+        if flow.request.host == e.host and flow.request.port == e.port:
+            self.count_stage('authy_connect_requests')
         # Built-in ProxyAuth runs first; never override its rejection.
         if flow.response is not None:
+            if flow.response.status_code == 407:
+                self.count_stage('proxy_auth_required')
             return
-        if (flow.request.host != e.host or flow.request.port != e.port
-                or flow.request.authority != f"{e.host}:{e.port}"
-                or flow.request.headers.get_all("host") != [f"{e.host}:{e.port}"]):
+        rejection = None
+        if flow.request.host != e.host or flow.request.port != e.port:
+            rejection = 'connect_other_endpoint'
+        elif flow.request.authority != f'{e.host}:{e.port}':
+            rejection = 'connect_authority_rejected'
+        elif not flow.request.headers.get_all('host'):
+            rejection = 'connect_host_missing'
+        elif (len(flow.request.headers.get_all('host')) != 1
+              or not e.authority_allowed(flow.request.headers.get_all('host')[0])):
+            rejection = 'connect_host_rejected'
+        if rejection:
+            self.count_stage(rejection)
             flow.response = http.Response.make(403, b"Endpoint not permitted.")
             return
         self.tunnels.add(flow.client_conn.id)
+        self.stages['authy_tunnels'] = min(1000000, self.stages['authy_tunnels'] + 1)
 
     def tls_clienthello(self, data):
         if (data.context.client.id not in self.tunnels
                 or data.client_hello.sni != self.endpoint.host):
             self.denied.add(data.context.client.id)
+            self.count_stage('sni_rejected')
             data.establish_server_tls_first = False
 
     def tls_start_client(self, data):
@@ -77,6 +103,8 @@ class Capture:
 
     def requestheaders(self, flow):
         e = self.endpoint
+        if flow.client_conn.id in self.tunnels and flow.client_conn.sni == e.host:
+            self.stages['tls_requests'] = min(1000000, self.stages['tls_requests'] + 1)
         if flow.response is not None:
             return
         try:
@@ -92,6 +120,16 @@ class Capture:
 
     def request(self, flow):
         if flow.response is not None:
+            return
+        if self.diagnostic:
+            self.stages['matching_requests'] = min(1000000, self.stages['matching_requests'] + 1)
+            from urllib.parse import urlsplit
+            target = urlsplit(flow.request.path)
+            if self.observation is None:
+                self.observation = dict(path=target.path, facts=diagnose_form(
+                    flow.request.raw_content, parse_authy, has_query='?' in flow.request.path))
+            # Diagnostic requests never reach Authy. This intentionally interrupts sync.
+            flow.response = http.Response.make(409, b'Diagnostic only; request not forwarded.')
             return
         try:
             flow.metadata["encrypted_record"] = encrypted_record(
@@ -124,6 +162,7 @@ class Capture:
 
     def error(self, flow):
         self.failed = True
+        self.network_error = True
 
     async def running(self):
         server = self.master.addons.get("proxyserver")
@@ -144,9 +183,14 @@ async def run(config):
             or source.get('archive_info', {}).get('hashes', {}).get('sha256') != ENGINE_ARCHIVE_SHA256):
         raise CaptureError('Capture engine does not match the pinned source.')
     required = {"endpoint", "confdir", "listen_host", "proxy_auth", "timeout"}
-    if set(config) - required - {"upstream_ca"} or not required <= config.keys():
+    if set(config) - required - {"upstream_ca", "diagnostic"} or not required <= config.keys():
         raise CaptureError("Invalid worker configuration.")
     endpoint = Endpoint(**config["endpoint"])
+    diagnostic = config.get('diagnostic', False)
+    if type(diagnostic) is not bool:
+        raise CaptureError('Invalid diagnostic mode.')
+    if diagnostic:
+        endpoint = DiagnosticEndpoint(endpoint)
     if (type(config["timeout"]) is not int or not 1 <= config["timeout"] <= 300
             or not ipaddress.ip_address(config["listen_host"]).is_private
             or ipaddress.ip_address(config["listen_host"]).is_unspecified
@@ -170,19 +214,25 @@ async def run(config):
                 scripts=[], save_stream_file=None, hardump="",
                 ssl_verify_upstream_trusted_ca=config.get("upstream_ca"),
                 allow_hosts=[rf"^{endpoint.host.replace('.', '[.]')}:{endpoint.port}$"])
-    capture = Capture(master, endpoint)
+    capture = Capture(master, endpoint, diagnostic)
     master.addons.add(capture)
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, master.shutdown)
     def timeout():
         capture.failed = True
+        capture.timed_out = True
         master.shutdown()
     timer = loop.call_later(config["timeout"], timeout)
     try:
         await master.run()
     finally:
         timer.cancel()
+    if diagnostic:
+        send('diagnostic_status', stages=capture.stages,
+             timed_out=capture.timed_out, network_error=capture.network_error)
+        if capture.observation is not None:
+            send('diagnostic', **capture.observation)
     send("done", ok=not capture.failed)
 
 

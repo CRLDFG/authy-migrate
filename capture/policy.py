@@ -6,6 +6,65 @@ import re
 from urllib.parse import parse_qsl, urlsplit
 
 MAX_BODY = 65536
+DIAGNOSTIC_STAGES = (
+    'client_connections', 'connect_requests', 'authy_connect_requests',
+    'proxy_auth_required', 'connect_other_endpoint', 'connect_authority_rejected',
+    'connect_host_missing', 'connect_host_rejected', 'sni_rejected',
+    'authy_tunnels', 'tls_requests', 'matching_requests',
+)
+# Historical Authy POST metadata, excluded from the encrypted-record IPC payload.
+# Source: https://velvetcache.org/2023/05/12/the-authy-backup-system/
+# This allowlist is not a claim about the unobserved iOS 28.6.1 schema.
+TRANSPORT_FIELDS = {"api_key": 512, "locale": 32, "password_timestamp": 32, "logo": 1024}
+UPDATE_PATH = re.compile(r'/json/users/[0-9]{1,20}/authenticator_tokens/update')
+
+
+class DiagnosticEndpoint:
+    """Recognize only the historical update route; never authorize forwarding."""
+    def __init__(self, endpoint):
+        self.endpoint = endpoint
+
+    def __getattr__(self, name):
+        return getattr(self.endpoint, name)
+
+    def request_allowed(self, method, scheme, host, port, target, headers):
+        parsed = urlsplit(target)
+        if not UPDATE_PATH.fullmatch(parsed.path) or len(target) > 4096:
+            return False
+        if parsed.scheme or parsed.netloc or parsed.fragment:
+            return False
+        exact = Endpoint(self.host, self.port, parsed.path, self.client_ip)
+        return exact.request_allowed(method, scheme, host, port, parsed.path, headers)
+
+
+def diagnose_form(body, validate, *, has_query):
+    """Return fixed boolean facts only, never input-derived names or values."""
+    facts = dict(form_valid=False, has_query=has_query, has_iv=False, has_kdf=False,
+                 duplicate_fields=False, unknown_fields=False, record_accepted=False)
+    if type(body) is not bytes or not 1 <= len(body) <= MAX_BODY:
+        return facts
+    try:
+        text = body.decode('ascii')
+        if re.search(r'%(?![0-9A-Fa-f]{2})', text):
+            return facts
+        pairs = parse_qsl(text, keep_blank_values=True, strict_parsing=True,
+                          encoding='utf-8', errors='strict', max_num_fields=64)
+        keys = [key for key, _ in pairs]
+        known = {'token_id', 'account_type', 'name', 'encrypted_seed', 'salt',
+                 'unique_iv', 'key_derivation_iterations', 'issuer', 'algorithm',
+                 'digits', 'period', 'original_name'} | TRANSPORT_FIELDS.keys()
+        facts.update(form_valid=True, has_iv='unique_iv' in keys,
+                     has_kdf='key_derivation_iterations' in keys,
+                     duplicate_fields=len(keys) != len(set(keys)),
+                     unknown_fields=bool(set(keys) - known))
+        try:
+            encrypted_record(body, validate)
+            facts['record_accepted'] = not has_query
+        except CaptureError:
+            pass
+    except (ValueError, UnicodeError):
+        pass
+    return facts
 
 
 class CaptureError(ValueError):
@@ -66,15 +125,21 @@ def encrypted_record(body, validate):
         if re.search(r"%(?![0-9A-Fa-f]{2})", text):
             raise ValueError()
         pairs = parse_qsl(text, keep_blank_values=True, strict_parsing=True,
-                          encoding="utf-8", errors="strict", max_num_fields=16)
+                          encoding="utf-8", errors="strict", max_num_fields=24)
         fields = dict(pairs)
         if len(fields) != len(pairs):
             raise ValueError()
         required = {"token_id", "account_type", "name", "encrypted_seed", "salt",
                     "unique_iv", "key_derivation_iterations"}
         optional = {"issuer", "algorithm", "digits", "period", "original_name"}
-        if not required <= fields.keys() or fields.keys() - required - optional:
+        if (not required <= fields.keys()
+                or fields.keys() - required - optional - TRANSPORT_FIELDS.keys()):
             raise ValueError()
+        for key, limit in TRANSPORT_FIELDS.items():
+            if key in fields:
+                value = fields.pop(key)
+                if len(value) > limit or any(ord(char) < 32 or ord(char) == 127 for char in value):
+                    raise ValueError()
         if "original_name" in fields:
             if len(fields.pop("original_name")) > 256:
                 raise ValueError()
