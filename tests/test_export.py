@@ -131,14 +131,13 @@ def test_official_importer(binary_path):
     assert result.stdout.startswith(b'PASS:')
 
 
-def test_windows_publication_fails_closed(tmp_path):
-    with patch('authy_migrate.output.os.name', 'nt'):
+def test_unknown_platform_fails_closed(tmp_path):
+    with patch('authy_migrate.output.os.name', 'unknown'):
         with pytest.raises(ValidationError):
             write_encrypted(tmp_path / 'x', b'encrypted')
     assert not list(tmp_path.iterdir())
 
 
-@pytest.mark.skipif(os.name != 'posix', reason='POSIX publication')
 def test_cli_success_no_passphrase_in_output(tmp_path, capsys):
     from authy_migrate.cli import main
     target = tmp_path / 'demo.json'

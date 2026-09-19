@@ -1,12 +1,16 @@
 # authy-migrate
 
-A **synthetic-data-only** compatibility prototype for encrypted Proton
-Authenticator exports. It does not yet migrate real Authy exports.
+An **experimental offline converter** from encrypted Authy exports to Proton
+Authenticator's native encrypted format. Development and CI use synthetic data
+exclusively; no real Twilio export has been certified.
 
-The offline core creates four public demonstration TOTP entries in memory and
-protects them using Proton's native format. No proxy, certificate, Proton account,
-cloud service, upload, or telemetry is required. Never register these public seeds
-on real accounts.
+The CSV/JSON adapters reject missing or contradictory parameters. Proton output
+has been verified with two official importers and Proton 1.4.3 (6) on a Mac.
+No proxy, certificate, Proton account, or cloud service is required.
+
+Read the [conversion workflow and supported formats](docs/authy-input.md).
+The conversion path never deliberately writes decrypted seeds in plaintext.
+Users must verify source parameters and resulting codes locally.
 
 ## Try it locally
 
@@ -27,12 +31,11 @@ Unicode are preserved exactly. Password arguments and environment variables are
 not supported. An interactive terminal is required. Choose a new destination
 inside a trusted private directory.
 
-POSIX output uses an encrypted 0600 temporary file, fsync, and atomic hard-link
-publication without overwriting an existing destination. Windows: the core is
-testable, but file publication is refused until its ACL handling is implemented
-and verified. This is not full Windows support. The core and both official
-importers pass macOS/Linux/Windows CI. Application import was verified on this Mac
-with Proton 1.4.3 (6). These results do not establish real Authy migration support.
+POSIX output publishes an encrypted 0600 file without overwriting an existing
+file. The [Windows layer](docs/windows-output.md) creates a protected DACL before
+writing, then publishes without replacement. Its dedicated Windows CI tests must
+pass before this new layer is described as validated. Universal Authy export
+compatibility is not claimed.
 
 ## Verify
 
