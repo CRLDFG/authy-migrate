@@ -41,12 +41,31 @@ cd /Users/cyrildufoing/Documents/ChatGPT/authy-to-proton
    `authy-migrate` with the temporary password.
 4. Open Authy normally, then return to the Mac terminal and press Enter to stop.
    Setup and observation together are limited to five minutes. Ctrl+C cancels.
-   A timeout produces failure, not a successful diagnostic.
+   A timeout produces failure automatically, without requiring Enter, not a
+   successful diagnostic.
 5. Immediately set the Wi-Fi proxy to Off and remove the session certificate
    profile/trust. Reopen Authy and verify normal operation. The Mac cannot
    verify iPhone cleanup.
 
 ## Results and next action
+
+The terminal also prints fixed connection counters and failure flags, including
+on a normal worker timeout or protocol error. These contain no hostnames, paths,
+request contents, or account identifiers:
+
+- `client_connections`: accepted connections from the configured iPhone IP.
+- `authy_tunnels`: CONNECT requests accepted for the permitted Authy endpoint.
+- `tls_requests`: HTTP request headers seen inside those matching TLS tunnels.
+- `matching_requests`: complete requests matching the diagnostic route/filter.
+- `timed_out` and `network_error`: whether the deadline or a flow error occurred.
+
+Zero client connections means the configured client was not observed. Connections
+without tunnels can indicate a proxy authentication or host mismatch. Tunnels
+without TLS requests can indicate a TLS/trust problem or simply no HTTP request.
+TLS requests without matches mean traffic was seen but did not match the route,
+method, or content-type filter. These are diagnostic clues, not definitive causes.
+Both the counters and flags may be shared. Timeout or errors still prevent
+publishing an observation file; counters do not prove a successful sync.
 
 After worker shutdown and private CA cleanup, the command writes
 `observation.private.json`. It contains the first matching account-specific path

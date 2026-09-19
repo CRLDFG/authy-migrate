@@ -18,6 +18,7 @@ class Session:
                  listen_host='127.0.0.1', app_version, source_reference, diagnostic=False):
         self.diagnostic = diagnostic
         self.observation = None
+        self.diagnostic_status = None
         self.provenance = dict(version=1, host=endpoint['host'], port=endpoint['port'],
             path=endpoint['path'], app_version=app_version,
             source_reference=source_reference, engine_revision=ENGINE_REVISION)
@@ -109,6 +110,17 @@ class Session:
                     or any(type(value) is not bool for value in facts.values())):
                 raise CaptureError('Invalid diagnostic result.')
             self.observation = dict(path=message['path'], facts=facts)
+        elif message.get('type') == 'diagnostic_status' and self.diagnostic:
+            stages = message.get('stages')
+            if (self.diagnostic_status is not None
+                    or set(message) != {'type', 'stages', 'timed_out', 'network_error'}
+                    or type(stages) is not dict
+                    or set(stages) != {'client_connections', 'authy_tunnels', 'tls_requests', 'matching_requests'}
+                    or any(type(v) is not int or not 0 <= v <= 1000000 for v in stages.values())
+                    or type(message['timed_out']) is not bool
+                    or type(message['network_error']) is not bool):
+                raise CaptureError('Invalid diagnostic status.')
+            self.diagnostic_status = {k: v for k, v in message.items() if k != 'type'}
         elif message.get("type") == "done":
             self.done = message.get("ok") is True
         else:
@@ -123,6 +135,11 @@ class Session:
             while self.done is None:
                 self.collect()
             self.process.wait(timeout=5)
+            if self.diagnostic and self.diagnostic_status is not None:
+                if self.diagnostic_status['timed_out']:
+                    raise CaptureError('Diagnostic reached its five-minute deadline; result is incomplete.')
+                if self.diagnostic_status['network_error']:
+                    raise CaptureError('Diagnostic encountered a network/protocol error; result is incomplete.')
             if self.process.returncode != 0 or not self.done:
                 raise CaptureError("Capture incomplete; no conversion permitted.")
             if self.diagnostic:

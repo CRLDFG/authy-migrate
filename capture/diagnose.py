@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import select
 import sys
 
 ROOT = Path(__file__).resolve().parent
@@ -15,6 +16,17 @@ from policy import CaptureError
 from session import Session
 from authy_migrate.output import write_encrypted
 from authy_migrate.core import ValidationError
+
+
+def wait_for_diagnostic(session):
+    print('After opening Authy, press Enter to stop; Ctrl+C cancels. Timeout is reported automatically.')
+    while session.done is None:
+        readable, _, _ = select.select([sys.stdin, session.process.stdout], [], [], .2)
+        if session.process.stdout in readable or session.buffer:
+            session.collect()
+        if sys.stdin in readable:
+            sys.stdin.readline()
+            break
 
 
 def run(args):
@@ -59,8 +71,13 @@ def run(args):
             print(f'Proxy: {args.mac_ip}:{session.port}; username: authy-migrate.')
             print('Transfer the public certificate, install it, enable trust, then configure the Wi-Fi proxy.')
             print('Open Authy normally. Leave backups enabled. The session lasts at most five minutes.')
-            input('After opening Authy, press Enter to stop and inspect the result; Ctrl+C cancels: ')
-            observation = session.finish()
+            try:
+                wait_for_diagnostic(session)
+                observation = session.finish()
+            finally:
+                if session.diagnostic_status is not None:
+                    print('Connection status (counts and flags only):')
+                    print(json.dumps(session.diagnostic_status, sort_keys=True))
         write_encrypted(destination / 'observation.private.json', json.dumps(observation, indent=2).encode())
         print('Diagnostic stopped; its private CA directory was removed.')
         print('Boolean results (these contain no field values or account identifier):')

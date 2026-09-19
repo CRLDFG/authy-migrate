@@ -35,6 +35,9 @@ class Capture:
         self.master, self.endpoint = master, endpoint
         self.diagnostic = diagnostic
         self.observation = None
+        self.timed_out = False
+        self.network_error = False
+        self.stages = dict(client_connections=0, authy_tunnels=0, tls_requests=0, matching_requests=0)
         self.tunnels = set()
         self.denied = set()
         self.failed = False
@@ -49,6 +52,7 @@ class Capture:
             client.error = "Client not permitted."
         else:
             self.clients.add(client.id)
+            self.stages['client_connections'] = min(1000000, self.stages['client_connections'] + 1)
 
     def client_disconnected(self, client):
         self.tunnels.discard(client.id)
@@ -66,6 +70,7 @@ class Capture:
             flow.response = http.Response.make(403, b"Endpoint not permitted.")
             return
         self.tunnels.add(flow.client_conn.id)
+        self.stages['authy_tunnels'] = min(1000000, self.stages['authy_tunnels'] + 1)
 
     def tls_clienthello(self, data):
         if (data.context.client.id not in self.tunnels
@@ -80,6 +85,8 @@ class Capture:
 
     def requestheaders(self, flow):
         e = self.endpoint
+        if flow.client_conn.id in self.tunnels and flow.client_conn.sni == e.host:
+            self.stages['tls_requests'] = min(1000000, self.stages['tls_requests'] + 1)
         if flow.response is not None:
             return
         try:
@@ -97,6 +104,7 @@ class Capture:
         if flow.response is not None:
             return
         if self.diagnostic:
+            self.stages['matching_requests'] = min(1000000, self.stages['matching_requests'] + 1)
             from urllib.parse import urlsplit
             target = urlsplit(flow.request.path)
             if self.observation is None:
@@ -136,6 +144,7 @@ class Capture:
 
     def error(self, flow):
         self.failed = True
+        self.network_error = True
 
     async def running(self):
         server = self.master.addons.get("proxyserver")
@@ -194,14 +203,18 @@ async def run(config):
         loop.add_signal_handler(sig, master.shutdown)
     def timeout():
         capture.failed = True
+        capture.timed_out = True
         master.shutdown()
     timer = loop.call_later(config["timeout"], timeout)
     try:
         await master.run()
     finally:
         timer.cancel()
-    if diagnostic and capture.observation is not None:
-        send('diagnostic', **capture.observation)
+    if diagnostic:
+        send('diagnostic_status', stages=capture.stages,
+             timed_out=capture.timed_out, network_error=capture.network_error)
+        if capture.observation is not None:
+            send('diagnostic', **capture.observation)
     send("done", ok=not capture.failed)
 
 

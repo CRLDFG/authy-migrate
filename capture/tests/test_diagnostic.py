@@ -19,6 +19,8 @@ def test_diagnostic_blocks_upstream_and_exports_only_path_and_booleans(upstream)
     assert upstream[0].bodies == []
     assert upstream[0].connections == 0
     assert result['path'] == PATH
+    assert session.diagnostic_status['stages'] == dict(client_connections=1, authy_tunnels=1,
+                                                       tls_requests=1, matching_requests=1)
     assert result['facts']['record_accepted'] is True
     assert all(type(value) is bool for value in result['facts'].values())
     assert b'public-secret-marker' not in json.dumps(result).encode()
@@ -53,6 +55,36 @@ def test_unknown_names_and_values_do_not_enter_diagnostic():
     assert 'private' not in json.dumps(result)
 
 
+def test_no_client_is_distinguishable_from_expired_session(upstream):
+    with start(upstream, diagnostic=True) as session:
+        with pytest.raises(CaptureError, match='No update request'):
+            session.finish()
+        assert not any(session.diagnostic_status['stages'].values())
+        assert session.diagnostic_status['timed_out'] is False
+    with start(upstream, diagnostic=True, timeout=1) as session:
+        while session.done is None:
+            session.collect(timeout=5)
+        with pytest.raises(CaptureError, match='deadline'):
+            session.finish()
+        assert session.diagnostic_status['timed_out'] is True
+        assert not any(session.diagnostic_status['stages'].values())
+
+
+def test_deadline_returns_without_pressing_enter(upstream, monkeypatch):
+    import os
+    import diagnose
+    read_fd, write_fd = os.pipe()
+    try:
+        with os.fdopen(read_fd) as terminal, start(upstream, diagnostic=True, timeout=1) as session:
+            monkeypatch.setattr(diagnose.sys, 'stdin', terminal)
+            diagnose.wait_for_diagnostic(session)
+            assert session.done is False
+            with pytest.raises(CaptureError, match='deadline'):
+                session.finish()
+    finally:
+        os.close(write_fd)
+
+
 def test_user_diagnostic_writes_private_observation_after_cleanup(upstream, tmp_path, monkeypatch, capsys):
     import diagnose
     from types import SimpleNamespace
@@ -69,7 +101,7 @@ def test_user_diagnostic_writes_private_observation_after_cleanup(upstream, tmp_
     def interact(_):
         assert b'409' in request(sessions[0], upstream[0].server_port, path=PATH)
         return ''
-    monkeypatch.setattr('builtins.input', interact)
+    monkeypatch.setattr(diagnose, 'wait_for_diagnostic', interact)
     destination = tmp_path / 'diagnostic'
     diagnose.run(SimpleNamespace(mac_ip='192.168.50.10', iphone_ip='192.168.50.20',
                                 capture_python=PYTHON, directory=destination))
