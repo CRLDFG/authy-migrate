@@ -7,6 +7,48 @@ from test_tls import upstream, start, request, body
 PATH = '/json/users/123456/authenticator_tokens/update'
 
 
+@pytest.mark.parametrize('host_headers,accepted', [
+    (['localhost'], True), (['localhost:443'], True),
+    (['localhost:444'], False), (['localhost', 'localhost:443'], False),
+    (['other.invalid'], False),
+])
+def test_connect_default_https_port_host_equivalence(upstream, host_headers, accepted):
+    import base64
+    import socket
+    import ssl
+    from test_tls import AUTH
+    # Diagnostic never connects upstream, so no service needs to listen on 443.
+    with start(upstream, diagnostic=True, endpoint={'port': 443}) as session:
+        headers = ''.join(f'Host: {value}\r\n' for value in host_headers)
+        auth = base64.b64encode(AUTH.encode()).decode()
+        raw = f'CONNECT localhost:443 HTTP/1.1\r\n{headers}Proxy-Authorization: Basic {auth}\r\n\r\n'
+        sock = socket.create_connection(('127.0.0.1', session.port), timeout=3)
+        try:
+            sock.sendall(raw.encode())
+            response = bytearray()
+            while b'\r\n\r\n' not in response:
+                part = sock.recv(1)
+                if not part:
+                    break
+                response.extend(part)
+            assert (b'200' if accepted else b'403') in response
+            if accepted:
+                context = ssl.create_default_context(cafile=str(session.certificate))
+                with context.wrap_socket(sock, server_hostname='localhost') as tls:
+                    payload = body()
+                    tls.sendall((f'POST {PATH} HTTP/1.1\r\nHost: localhost\r\n'
+                                 f'Content-Type: application/x-www-form-urlencoded\r\n'
+                                 f'Content-Length: {len(payload)}\r\nConnection: close\r\n\r\n').encode() + payload)
+                    assert b'409' in tls.recv(4096)
+                assert session.finish()['facts']['record_accepted'] is True
+            else:
+                with pytest.raises(CaptureError):
+                    session.finish()
+        finally:
+            sock.close()
+    assert upstream[0].connections == 0
+
+
 def test_diagnostic_blocks_upstream_and_exports_only_path_and_booleans(upstream):
     payload = body() + b'&api_key=public-secret-marker'
     with start(upstream, diagnostic=True) as session:

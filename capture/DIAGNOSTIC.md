@@ -63,6 +63,10 @@ request contents, or account identifiers:
 - `connect_authority_rejected`: the CONNECT authority did not match exactly.
 - `connect_host_missing` and `connect_host_rejected`: the CONNECT Host header was
   missing or did not satisfy the strict policy. Values are never exported.
+  A single exact host with `:443` or without the default HTTPS port is accepted
+  when the configured destination is port 443. Other ports require an explicit
+  matching port. Duplicate Host fields remain rejected, and the CONNECT target
+  must always contain the exact configured host and port.
 - `sni_rejected`: the TLS ClientHello failed the tunnel/SNI policy.
 - `authy_tunnels`: CONNECT requests accepted for the permitted Authy endpoint.
 - `tls_requests`: HTTP request headers seen inside those matching TLS tunnels.

@@ -79,7 +79,8 @@ class Capture:
             rejection = 'connect_authority_rejected'
         elif not flow.request.headers.get_all('host'):
             rejection = 'connect_host_missing'
-        elif flow.request.headers.get_all('host') != [f'{e.host}:{e.port}']:
+        elif (len(flow.request.headers.get_all('host')) != 1
+              or not e.authority_allowed(flow.request.headers.get_all('host')[0])):
             rejection = 'connect_host_rejected'
         if rejection:
             self.count_stage(rejection)
