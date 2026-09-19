@@ -16,8 +16,9 @@ Statut : NON EXÉCUTÉ. Ne pas utiliser de comptes réels pour ce gate.
 | 2 | Démo & Co | élève+test@example.invalid | SHA256 | 8 | 15 |
 | 3 | Example | demo@example.invalid | SHA512 | 8 | 60 |
 
-5. Comparer les codes au même instant avec un calculateur indépendant utilisant
-   seulement les seeds publiques de `src/authy_migrate/synthetic.py`. Noter l'heure
+5. Exécuter `python3 scripts/synthetic_codes.py` pour comparer les codes au même
+   instant. Ce calcul indépendant utilise HMAC standard et vérifie d’abord trois
+   vecteurs RFC 6238 ; il ne prend aucune entrée réelle. Noter l'heure
    UTC et le résultat, sans collecter de secret réel. Tester près d'un changement
    de période ; tenir compte des frontières temporelles.
 6. Vérifier le rejet d'une mauvaise phrase de passe et d'un fichier modifié
