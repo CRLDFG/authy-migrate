@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import subprocess
+import shutil
 from unittest.mock import patch
 import pytest
 from authy_migrate.output import write_encrypted
@@ -15,6 +16,7 @@ def test_protected_dacl_and_atomic_no_clobber(tmp_path):
     assert target.read_bytes() == payload
     # Independent .NET ACL inspection, not our serializer/parser or chmod emulation.
     script = '''
+$ErrorActionPreference = 'Stop'
 $a = Get-Acl -LiteralPath $env:AUTHY_MIGRATE_TEST_PATH
 $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $rules = $a.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
@@ -22,9 +24,10 @@ if (-not $a.AreAccessRulesProtected -or $rules.Count -ne 1) { exit 1 }
 $r = $rules[0]
 if ($r.IdentityReference.Value -ne $sid -or $r.IsInherited -or $r.AccessControlType -ne 'Allow' -or $r.FileSystemRights -ne 'FullControl') { exit 2 }
 '''
-    result = subprocess.run(['powershell','-NoProfile','-NonInteractive','-Command',script],
+    result = subprocess.run([shutil.which('pwsh') or 'powershell','-NoProfile','-NonInteractive','-Command',script],
                             env=dict(os.environ,AUTHY_MIGRATE_TEST_PATH=str(target)),capture_output=True)
-    assert result.returncode == 0, 'Independent Windows ACL verification failed'
+    # This test only creates public synthetic bytes; shell diagnostics help diagnose CI.
+    assert result.returncode == 0, result.stderr.decode(errors='replace')
     with pytest.raises(FileExistsError):
         write_encrypted(target,b'other')
     assert target.read_bytes() == payload
