@@ -1,4 +1,4 @@
-# Experimental capture module (work in progress)
+# Experimental capture module
 
 This directory is separate from the offline converter. No real traffic capture,
 certificate installation, or user credentials are used in development. The module
@@ -67,7 +67,10 @@ skip other than the explicitly documented unreleased mitmproxy package.
 
 ## Executed synthetic integration tests
 
-31 tests passed locally on the Mac above. The harness uses actual Python TLS
+38 capture tests passed in [CI run 35442151338](https://github.com/CRLDFG/authy-migrate/actions/runs/35442151338)
+at code commit `08063027362597bd37443622c7228f7a8ee974dd`, on macOS 26 arm64 with
+Python 3.14.7. The same run passed 106 offline tests on macOS and Linux and 107 on
+Windows (platform-specific tests are skipped elsewhere). The harness uses actual Python TLS
 servers on loopback and a separate mitmdump-engine process, not mocked TLS hooks.
 It covers matching CONNECT/SNI/Host, substituted SNI rejected before an upstream
 connection, lookalike hosts, Basic proxy authentication, client IP restrictions,
@@ -88,8 +91,9 @@ PYTHONPATH=capture:src .venv/bin/python -m pytest -q capture/tests
 
 The parent deletes only its newly created session directory. If the parent is
 killed or cleanup fails, CA material may remain; deletion is not physical erasure.
-No RAM volume or iPhone trust-removal verification is implemented. Interactive
-workflow validation and final CI evidence are still being expanded. Capture
+No RAM volume or iPhone trust-removal verification is implemented. The interactive
+workflow, distinct-identifier checks, provenance binding, cleanup failure, and
+invalid-record refusal are covered by the passing synthetic suite. Capture
 provenance records the explicit endpoint, app version, source reference, and pinned
 engine revision. Its hash becomes part of each record's origin; the parameter-file
 binding includes it. This preserves a declaration without authenticating it.

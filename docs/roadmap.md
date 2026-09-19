@@ -18,3 +18,10 @@ The first deliverable is the restricted compatibility PR. Its synthetic applicat
 gate passed on Proton Authenticator 1.4.3 (build 6), documented in `validation.md`.
 The next PR adds the offline adapters described in `authy-input.md` and Windows
 publication described in `windows-output.md`. Real exports remain unvalidated.
+
+The explicitly requested optional capture milestone is implemented as an
+experimental macOS arm64 workflow with synthetic-only TLS/application fixtures.
+See `../capture/README.md` and `../capture/WORKFLOW.md`. Real iPhone/Authy versions
+and endpoint profiles remain user-local review/validation work. Other capture
+hosts, other destinations, Android acquisition, and optional RAM-volume hardening
+remain roadmap items rather than advertised support.

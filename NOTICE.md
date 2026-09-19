@@ -18,3 +18,9 @@ Format sources inspected without copying their code (pinned revisions in docs/au
 - https://github.com/nick22985/authy-decryptor
 
 No exclusive discovery of an Authy acquisition method is claimed.
+
+The separate experimental capture environment uses the MIT-licensed mitmproxy
+engine at b506c68108e287104045333ade476d92c39c275e through its Python API. It is
+installed from a hash-pinned upstream archive, not vendored or modified here.
+Its dependencies retain their own licenses and notices. Capture source inspection
+and dependency-selection evidence are recorded in capture/README.md.
