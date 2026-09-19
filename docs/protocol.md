@@ -23,13 +23,19 @@ with distinct UUIDs.
 
 Limits: 1–1000 entries; 10–128 seed bytes; 1–256 characters per metadata field;
 SHA1/SHA256/SHA512; 6 or 8 digits; integer periods of 1–65535 seconds. HOTP and
-Steam are rejected. External input cannot select output KDF parameters. Authy
-parsers are not included at this stage: no ambiguous CSV repair, Base32/hex
-inference, or presumed source cryptographic defaults.
+Steam are rejected. External input cannot select output KDF parameters. The
+separate [Authy adapters](authy-input.md) use explicit source profiles and reject
+ambiguous CSV repair and Base32/hex inference. `core.py` contains only the
+destination-independent OTP model and validation; `proton.py` owns this format,
+URI serialization, and encryption.
 
-The official importer can include a complete URI in a partial-import error. Our
-harness suppresses native error details and requires zero partial errors. The iOS
-logging path has not been exercised; no application data leak is claimed.
+The official importer can include a complete URI in a partial-import error. A
+synthetic probe now executes this path in both pinned libraries: a public seed
+with an invalid algorithm yields one rejected entry whose error message contains
+the seed. The harness checks this in memory, suppresses native error details, and
+requires zero partial errors for normal generated exports. Tests require no seed
+on stdout and an empty stderr. The iOS logging path has not been exercised; this
+library-level observation does not establish an application log leak.
 
 ## Relationship to the installed Mac application
 

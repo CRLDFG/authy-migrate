@@ -12,6 +12,9 @@ Assets include seeds, passwords, account labels, and issuers. OTP objects have
 redacted repr output. The CLI suppresses exception details. A Python caller can
 still inspect fields, traceback locals, and memory: this API is not an enclave.
 No logger is registered for the Proton reference library.
+The reference harness exercises a malformed public URI and confirms that both
+pinned importers include its seed in a returned error string. That string is never
+printed. This establishes native error contents, not an observed iOS log leak.
 
 The application controls its deliberate writes and messages. It cannot control
 swap, hibernation, crash dumps, internal bytes/str copies, screenshots, a compromised

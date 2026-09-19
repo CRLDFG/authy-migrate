@@ -5,7 +5,8 @@ from pathlib import Path
 import sys
 import warnings
 from .authy import FORMATS, convert_authy, parameter_template, parse_authy, resolve_parameters
-from .core import encrypt_export, ValidationError
+from .core import ValidationError
+from .proton import encrypt_export
 from .input import read_input
 from .output import write_encrypted
 from .synthetic import entries

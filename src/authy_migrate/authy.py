@@ -16,7 +16,8 @@ from cryptography.hazmat.primitives import hashes, padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-from .core import MAX_ENTRIES, OtpEntry, ValidationError, encrypt_export
+from .core import MAX_ENTRIES, OtpEntry, ValidationError
+from .proton import encrypt_export
 
 MAX_INPUT_BYTES = 8 * 1024 * 1024
 MAX_ITERATIONS = 1_000_000
