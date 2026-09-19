@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "authy-migrate"
-version = "0.0.1"
-description = "Offline Proton encrypted-export compatibility prototype (synthetic data only)"
+version = "0.1.0"
+description = "Experimental offline Authy export to encrypted Proton converter"
 requires-python = ">=3.12"
 license = "GPL-3.0-only"
 dependencies = ["cryptography==50.0.1"]

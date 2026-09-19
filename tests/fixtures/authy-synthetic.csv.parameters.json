@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "source_sha256": "cbf6c438cc405d934de5f3661482cd83f926b0c5b9e3bfab825a03b7dbf265ae",
+  "records": [
+    {
+      "row": 1,
+      "otp_type": "TOTP",
+      "secret_encoding": "base32"
+    },
+    {
+      "row": 2,
+      "otp_type": "TOTP",
+      "secret_encoding": "hex"
+    },
+    {
+      "row": 3,
+      "otp_type": "TOTP",
+      "secret_encoding": "raw"
+    },
+    {
+      "row": 4,
+      "otp_type": "TOTP",
+      "secret_encoding": "base32"
+    }
+  ]
+}

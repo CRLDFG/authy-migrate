@@ -11,7 +11,8 @@ import pytest
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
-from authy_migrate.core import AAD, OtpEntry, ValidationError, encrypt_export
+from authy_migrate.core import OtpEntry, ValidationError
+from authy_migrate.proton import AAD, encrypt_export
 from authy_migrate.synthetic import entries, PASSWORD
 from authy_migrate.output import write_encrypted
 
@@ -129,16 +130,18 @@ def test_official_importer(binary_path):
     result = subprocess.run([str(binary.resolve())], input=encrypt_export(entries(), PASSWORD), capture_output=True)
     assert result.returncode == 0, 'Official importer rejected synthetic export; details suppressed'
     assert result.stdout.startswith(b'PASS:')
+    assert b'native error probe' in result.stdout
+    assert not result.stderr
+    assert b'GEZDGNBVGY3TQOJQ' not in result.stdout
 
 
-def test_windows_publication_fails_closed(tmp_path):
-    with patch('authy_migrate.output.os.name', 'nt'):
+def test_unknown_platform_fails_closed(tmp_path):
+    with patch('authy_migrate.output.os.name', 'unknown'):
         with pytest.raises(ValidationError):
             write_encrypted(tmp_path / 'x', b'encrypted')
     assert not list(tmp_path.iterdir())
 
 
-@pytest.mark.skipif(os.name != 'posix', reason='POSIX publication')
 def test_cli_success_no_passphrase_in_output(tmp_path, capsys):
     from authy_migrate.cli import main
     target = tmp_path / 'demo.json'

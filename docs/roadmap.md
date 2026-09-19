@@ -14,4 +14,7 @@
 Before a stable release: dependency advisories and license review, external review,
 green CI on advertised platforms, identified and tested Proton builds, and
 traceable releases. No universal support or guaranteed Twilio export deadline.
-The first deliverable is the restricted compatibility PR.
+The first deliverable is the restricted compatibility PR. Its synthetic application
+gate passed on Proton Authenticator 1.4.3 (build 6), documented in `validation.md`.
+The next PR adds the offline adapters described in `authy-input.md` and Windows
+publication described in `windows-output.md`. Real exports remain unvalidated.

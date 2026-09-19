@@ -12,7 +12,7 @@ The format was studied in official Proton sources. The Python core uses
 cryptography (Apache-2.0/BSD licenses) and its dependencies. It does not implement
 cryptographic primitives itself.
 
-Work cited by the project brief, not integrated in this prototype:
+Format sources inspected without copying their code (pinned revisions in docs/authy-input.md):
 - https://github.com/valentin-dirken/authy-export
 - https://github.com/serbbil/Authy-GDPR-Export-Decryption
 - https://github.com/nick22985/authy-decryptor

@@ -1,6 +1,6 @@
 # Security policy
 
-Version 0.0.1 is experimental and tested with synthetic data only. No stable
+Version 0.1.0 is experimental and tested with synthetic data only. No stable
 version is supported. Never submit exports, seeds, passwords, or raw diagnostics
 to issues, PRs, or hosted environments.
 
