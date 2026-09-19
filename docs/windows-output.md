@@ -10,6 +10,11 @@ for the current user's SID, no inherited DACL entries, and no inheritable handle
 Publication fails if the filesystem cannot enforce that ACL. UNC paths and
 alternate data streams are rejected.
 
+Both requested and persisted descriptors use Windows' SDDL serializer for
+comparison, including its [SID aliases](https://learn.microsoft.com/en-us/windows/win32/secauthz/sid-strings).
+The comparison requires the protected DACL and the same single grant; only the
+automatic-inheritance bookkeeping flag may differ.
+
 After `WriteFile` and `FlushFileBuffers`, the handle is closed. `MoveFileExW`
 renames within the same directory using `MOVEFILE_WRITE_THROUGH`, without
 `MOVEFILE_REPLACE_EXISTING` or cross-volume copy fallback. An existing destination

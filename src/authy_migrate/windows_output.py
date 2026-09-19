@@ -67,20 +67,28 @@ class WindowsAPI:
         finally:
             self.kernel.CloseHandle(token)
 
-    def check_dacl(self, handle, sid):
+    def dacl_string(self, descriptor):
+        string = W.LPWSTR()
+        self.check(self.security.ConvertSecurityDescriptorToStringSecurityDescriptorW(
+            descriptor, 1, 4, C.byref(string), None))
+        try:
+            return string.value
+        finally:
+            self.kernel.LocalFree(C.cast(string, W.LPVOID))
+
+    def check_dacl(self, handle, expected_descriptor):
         descriptor = W.LPVOID()
         # SE_FILE_OBJECT=1, DACL_SECURITY_INFORMATION=4. Read back before writing.
         if self.security.GetSecurityInfo(handle, 1, 4, None, None, None, None, C.byref(descriptor)):
             raise OSError("Filesystem cannot verify the required Windows ACL.")
         try:
-            string = W.LPWSTR()
-            self.check(self.security.ConvertSecurityDescriptorToStringSecurityDescriptorW(descriptor, 1, 4, C.byref(string), None))
-            try:
-                expected = f"(A;;FA;;;{sid})"
-                if string.value not in ("D:P" + expected, "D:PAI" + expected):
-                    raise OSError("Windows ACL is not restricted to the current user.")
-            finally:
-                self.kernel.LocalFree(C.cast(string, W.LPVOID))
+            # Windows may serialize a SID using an alias (e.g. LA for RID 500).
+            # Canonicalize both descriptors with the same OS serializer.
+            expected = self.dacl_string(expected_descriptor)
+            actual = self.dacl_string(descriptor)
+            if (not expected.startswith("D:P(")
+                    or actual not in (expected, "D:PAI" + expected[3:])):
+                raise OSError("Windows ACL is not restricted to the current user.")
         finally:
             self.kernel.LocalFree(descriptor)
 
@@ -107,7 +115,7 @@ def write_windows(path: Path, archive: bytes):
             handle = None
             raise OSError("Cannot create secure temporary output.")
         created = True
-        api.check_dacl(handle, sid)
+        api.check_dacl(handle, descriptor)
         buffer = C.create_string_buffer(archive)
         position = 0
         while position < len(archive):
