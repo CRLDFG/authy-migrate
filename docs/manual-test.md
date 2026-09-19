@@ -1,6 +1,8 @@
 # Test manuel dans Proton — à exécuter par l'utilisateur
 
-Statut : NON EXÉCUTÉ. Ne pas utiliser de comptes réels pour ce gate.
+Statut : exécuté le 19 septembre 2026 sur Proton Authenticator 1.4.3 (6),
+application iPad sur macOS arm64 26.6.2. Résultats dans `validation.md`.
+Cette procédure reste à répéter pour tout autre build. Aucun compte réel utilisé.
 
 1. Noter OS, version et numéro de build Proton Authenticator, origine du binaire,
    date et révision source correspondante (ou correspondance inconnue).

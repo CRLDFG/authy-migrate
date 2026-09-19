@@ -2,7 +2,9 @@
 
 Ce prototype est sous GPL-3.0-only, texte dans LICENSE. Le harness lie la
 bibliothèque GPLv3 `protonpass/proton-pass-common`, révision
-26412c72370999843806cb7d4ec6a7a54a7a36a1, sans modification du code amont.
+26412c72370999843806cb7d4ec6a7a54a7a36a1, et le second harness la révision
+77afcc2f6bfa2326cd13f26f8f9d2b1d418d77e8 (cœur 1.3.0), sans modification
+du code amont.
 Les notices et licences des dépendances restent applicables. Aucun binaire tiers
 n'est inclus dans le dépôt. Une distribution binaire devra fournir les sources
 correspondantes et notices applicables ; aucune release binaire n'est préparée ici.

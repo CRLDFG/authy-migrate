@@ -29,8 +29,9 @@ obligatoire. La destination doit être nouvelle et dans un dossier privé de con
 L'écriture POSIX utilise un fichier temporaire chiffré en 0600, fsync, puis un lien
 atomique sans écrasement. Windows : cœur testable, publication de fichier refusée
 jusqu'à implémentation et validation des ACL. Le prototype n'annonce donc pas de
-support Windows complet. Linux et Windows doivent passer leur CI avant toute
-annonce de support ; seul macOS a été exécuté localement.
+support Windows complet. Le cœur et les deux importeurs officiels passent la CI macOS/Linux/Windows.
+L’import dans l’application a été vérifié sur ce Mac avec Proton 1.4.3 (6).
+Ces essais ne constituent pas une annonce de support de migration Authy réelle.
 
 ## Vérifier
 
@@ -42,7 +43,7 @@ cargo build --locked --manifest-path reference/legacy/Cargo.toml
 ```
 
 Sans un binaire Rust, le test indépendant correspondant est explicitement ignoré en local (échec en CI). La CI construit
-ce binaire avant les tests. L'importeur reçoit uniquement le fichier chiffré par
+les deux binaires avant les tests. L'importeur reçoit uniquement le fichier chiffré par
 stdin ; il connaît la phrase de passe publique du jeu synthétique. Il ne convient
 pas aux données réelles et ne doit pas recevoir un diagnostic utilisateur brut.
 
