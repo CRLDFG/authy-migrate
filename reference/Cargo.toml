@@ -1,0 +1,11 @@
+[package]
+name = "authy-migrate-reference-check"
+version = "0.0.1"
+edition = "2024"
+license = "GPL-3.0-only"
+publish = false
+
+[dependencies]
+proton-authenticator = { git = "https://github.com/protonpass/proton-pass-common.git", rev = "26412c72370999843806cb7d4ec6a7a54a7a36a1", default-features = false }
+serde_json = "1"
+base64 = "0.23.1"
