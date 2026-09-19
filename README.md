@@ -33,9 +33,9 @@ inside a trusted private directory.
 
 POSIX output publishes an encrypted 0600 file without overwriting an existing
 file. The [Windows layer](docs/windows-output.md) creates a protected DACL before
-writing, then publishes without replacement. Its dedicated Windows CI tests must
-pass before this new layer is described as validated. Universal Authy export
-compatibility is not claimed.
+writing, then publishes without replacement. Dedicated Windows CI tests passed;
+see the [adapter validation record](docs/adapter-validation.md). Universal Authy
+export compatibility is not claimed.
 
 ## Verify
 

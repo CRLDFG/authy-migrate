@@ -24,8 +24,8 @@ by this call. Crashes or forced termination can leave an encrypted temporary fil
 Windows CI independently checks the DACL using `Get-Acl`/.NET: inheritance is
 blocked, exactly one explicit rule grants FullControl to the current user. Tests
 also verify file contents, refusal to overwrite, and cleanup after failed ACL
-verification. Acquire actual passing CI results before claiming this layer is
-validated.
+verification. These checks passed on an actual Windows runner; see
+[the recorded CI evidence](adapter-validation.md).
 
 This does not protect against the current user, an administrator taking ownership,
 backup privileges, or a compromised host. Use a trusted private local directory.
