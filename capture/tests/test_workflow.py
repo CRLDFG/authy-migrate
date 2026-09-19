@@ -139,7 +139,7 @@ def test_check_command_accepts_noninteractive_terminal_without_creating_files(tm
     import subprocess
     args = arguments(tmp_path, (SimpleNamespace(server_port=443), None))
     before = set(tmp_path.iterdir())
-    command = [str(ROOT / '.venv/bin/python'), '-I', '-B', str(ROOT / 'capture/cli.py'),
+    command = [cli.sys.executable, '-I', '-B', str(ROOT / 'capture/cli.py'),
                '--check', '--profile', str(args.profile), '--capture-python', str(PYTHON),
                '--listen-ip', '127.0.0.1', '--client-ip', '127.0.0.1',
                '--expected-records', '4', '--certificate', str(args.certificate),
