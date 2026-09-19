@@ -1,83 +1,76 @@
-# Validation — 19 septembre 2026
+# Validation evidence — September 19, 2026
 
-Exécuté localement : macOS arm64, Python 3.14.2, cryptography 50.0.1,
-Rust/Cargo 1.92.0, importeur Proton 2.1.0 au commit épinglé dans Cargo.toml.
+Local environment: macOS arm64, Python 3.14.2, cryptography 50.0.1, Rust/Cargo 1.92.0.
+Proton importers: core 2.1.0 and 1.3.0, pinned in the two Cargo manifests.
 
-`cargo build --locked --manifest-path reference/Cargo.toml` : succès.
-`python -m pytest -q` : **26 tests réussis**, dont les deux programmes Rust indépendants (cœurs 2.1.0 et 1.3.0).
+Both `cargo build --locked` commands succeed. `python -m pytest -q`: **26 passed**,
+including two independent official-importer harnesses.
 
-Le harness vérifie quatre entrées complètes : secrets, labels Unicode, issuer,
-SHA1/SHA256/SHA512, 6/8 chiffres, périodes 15/30/60, UUID distincts pour doublons
-et homonymes, zéro erreur partielle. Rejet par l'importeur officiel des mots de
-passe incorrects (dont espaces retirés) et du ciphertext modifié.
+The harness checks four complete entries: seed bytes, Unicode labels, issuers,
+SHA1/SHA256/SHA512, 6/8 digits, 15/30/60-second periods, distinct UUIDs for duplicates
+and shared labels, and zero partial-import errors. Official importers reject
+incorrect passwords, removed password whitespace, and altered ciphertext.
 
-Autres tests : aléa, absence de seeds dans l'enveloppe, différence Unicode NFC/NFD,
-validation avant chiffrement, limites OTP, messages expurgés, absence d'appels
-open/socket dans le cœur testé, écriture 0600 sans écrasement, refus de symlink,
-nettoyage après erreur, refus du terminal non interactif.
+Other tests cover randomness, absence of seeds in the outer envelope, NFC/NFD
+password differences, validation before encryption, OTP limits, redacted messages,
+blocked open/socket calls in the tested core path, mode 0600, atomic no-clobber
+publication, symlink refusal, error cleanup, and noninteractive terminal refusal.
+The open/socket checks are focused regression tests, not an exhaustive syscall
+observation.
 
-Un premier échec a révélé une faute dans la constante Base32 SHA512 attendue du
-harness. La constante a été corrigée à partir des octets publics RFC ; le format
-chiffré n'a pas été modifié pour contourner le test.
+An initial reference-check failure exposed a typo in the expected SHA512 Base32
+fixture. The expected value was corrected from the public seed bytes; the export
+format was not changed to accommodate the test.
 
-Audit runtime Python : aucune vulnérabilité connue signalée lors de l'exécution.
-Audit outillage Python : aucune vulnérabilité connue signalée. Audit Rust : 192
-dépendances, aucune vulnérabilité signalée (base RustSec de 1251 avis). La CI
-multiplateforme est verte au commit `7752b09` : macOS 25 réussis, Linux 25
-réussis, Windows 22 réussis / 3 tests POSIX ignorés. La CLI installée est testée
-sur les trois OS. [Exécution](https://github.com/CRLDFG/authy-migrate/actions/runs/35437705736).
-Les locks enregistrent les versions exactes et hashes disponibles.
+Python runtime/tooling audits reported no known vulnerabilities. Rust core 2.1.0
+harness audit: 192 dependencies; core 1.3.0 harness audit: 187 dependencies; no
+vulnerabilities reported against the inspected RustSec database of 1251 advisories.
+Lockfiles record exact versions and available hashes.
 
-Non prouvé : chaîne de logs iOS, migration Authy réelle, compatibilité des exports
-Twilio, sécurité de capture TLS, ACL Windows, nettoyage après panne, effacement
-physique. Les tests open/socket sont un contrôle de régression ciblé, pas une
-observation exhaustive des appels système. Aucun compte réel n'a été traité.
+The [code CI run at 405fc13](https://github.com/CRLDFG/authy-migrate/actions/runs/35438043845)
+passed: macOS **26**, Linux **26**, Windows **23 passed / 3 POSIX tests skipped**.
+Both official importers were compiled and tested. Installed CLI checks, audits,
+and the limited accidental-secret hygiene check passed.
 
-Vérification complémentaire du cœur 1.3.0 déclaré par le tag iOS 1.4.3 :
-`cargo build --locked --manifest-path reference/legacy/Cargo.toml`, puis même
-harness sur la même archive synthétique : succès. Audit du verrou associé :
-187 dépendances, aucune vulnérabilité signalée par la base locale RustSec.
+## Distributed application test
 
-## Test dans l’application distribuée
+Proton Authenticator **1.4.3 (6)**, iPad application on macOS **26.6.2 arm64**.
+The initially empty app received `demo.proton.json` through Import → Proton
+Authenticator. No direct database access or real account data was used. The public
+Unicode passphrase retained two leading and two trailing spaces. The application
+confirmed **Successfully imported 4 items**.
 
-19 septembre 2026, Proton Authenticator **1.4.3 (6)**, macOS **26.6.2 arm64**.
-L’application initialement vide a reçu `demo.proton.json` via son interface
-Import → Proton Authenticator. Aucun accès à sa base interne, aucun compte réel.
-La phrase publique Unicode comportant deux espaces de début et de fin est celle
-utilisée par le harness. L’application a annoncé **Successfully imported 4 items**.
+UI screenshots were observed in the session, not exported. Codes were compared
+against `scripts/synthetic_codes.py`, which checks three RFC 6238 vectors first:
 
-Comparaison par captures de l’interface (observées dans la session, non exportées)
-et calcul indépendant `scripts/synthetic_codes.py`, auto-vérifié contre trois
-vecteurs RFC 6238 :
-
-| Instant du calcul UTC | SHA1, entrées 1 et 4 | SHA256, entrée 2 | SHA512, entrée 3 | Observation UI |
+| Calculation time UTC | SHA1, entries 1/4 | SHA256, entry 2 | SHA512, entry 3 | UI observation |
 |---|---|---|---|---|
-| 10:44:36 | 102129 | 63934933 | 13765148 | Tous identiques avant expiration SHA256 |
-| 10:44:50 | 102129 | 75336974 | 13765148 | Tous identiques après renouvellement SHA256 |
+| 10:44:36 | 102129 | 63934933 | 13765148 | All match before the SHA256 boundary |
+| 10:44:50 | 102129 | 75336974 | 13765148 | All match after the SHA256 rollover |
 
-Labels Unicode, issuers, deux doublons et homonyme visibles. Les périodes
-15/30/60 s concordent avec les compteurs affichés ; les paramètres internes et
-les seeds sont aussi comparés intégralement par les deux harness Rust.
+Unicode metadata, a duplicate, and a separate entry sharing the same label were
+visible. The 15/30/60-second periods matched UI countdowns. Both Rust harnesses
+also compare the complete internal parameters and seeds.
 
-Essais négatifs dans l’application : mauvais mot de passe rejeté avec **Wrong
-password** ; copie avec un bit de ciphertext modifié rejetée avec le même message,
-malgré la bonne phrase de passe. Après annulation, seules les quatre entrées de
-démonstration sont visibles. Ne pas interpréter ce message comme la preuve que
-le mot de passe est la cause : Proton regroupe ici les échecs d’authentification.
+Negative UI tests: an incorrect password produced **Wrong password**. A copy with
+one ciphertext bit flipped produced the same error despite the correct password.
+After cancellation, only the original four demonstration entries remained. This
+message does not establish that the password caused the failure: Proton groups
+these authentication failures under the same error.
 
-| État | Résultat |
+| State | Result |
 |---|---|
-| Conversion synthétique | Effectuée |
-| Import officiel, application 1.4.3 (6) | Accepté, 4 entrées |
-| Codes synthétiques | Vérifiés sur deux intervalles |
-| Nettoyage | Non effectué : 4 entrées de test et 2 archives chiffrées conservées localement |
-| Migration Authy réelle | Non implémentée et non testée |
+| Synthetic conversion | Completed |
+| Official application import, 1.4.3 (6) | Accepted, four entries |
+| Synthetic codes | Verified across two intervals |
+| Cleanup | Not performed: four test entries and two encrypted archives retained locally |
+| Real Authy migration | Not implemented or tested |
 
-La conservation des fixtures facilite la revue ; elle n’est pas une déclaration
-de nettoyage ni d’effacement. Les archives sont ignorées par Git. Aucun réglage
-de synchronisation ou de sécurité de l’application n’a été modifié.
+Keeping the fixtures available for review is not a cleanup or erasure claim.
+Archives are ignored by Git. No application security or synchronization setting
+was changed.
 
-CI du commit de code `405fc13` : [exécution réussie](https://github.com/CRLDFG/authy-migrate/actions/runs/35438043845).
-macOS : 26 réussis ; Linux : 26 réussis ; Windows : 23 réussis et 3 tests POSIX
-ignorés. Les deux importeurs sont compilés et testés dans cette exécution ; les audits et
-le contrôle limité de secrets accidentels passent également.
+Not established: iOS logging behavior, real Authy migration, Twilio export
+compatibility, TLS capture safety, Windows output ACLs, cleanup after power loss,
+physical erasure, or reproducible App Store binary/source identity. No real account
+was processed. Application results do not establish compatibility with other builds.

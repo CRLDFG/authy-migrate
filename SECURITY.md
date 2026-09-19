@@ -1,15 +1,15 @@
-# Sécurité
+# Security policy
 
-Version 0.0.1 expérimentale, données synthétiques exclusivement ; aucune version
-stable prise en charge. Ne pas envoyer d'exports, seeds, mots de passe ou logs
-bruts dans une issue, une PR ou un environnement hébergé.
+Version 0.0.1 is experimental and tested with synthetic data only. No stable
+version is supported. Never submit exports, seeds, passwords, or raw diagnostics
+to issues, PRs, or hosted environments.
 
-Signaler une vulnérabilité via le canal privé GitHub du dépôt s'il est activé ;
-sinon contacter le mainteneur par un canal privé convenu avant de fournir des
-détails sensibles. Ne pas inventer d'adresse de contact ou publier l'exploitation.
+Use the repository's private GitHub vulnerability reporting channel if enabled.
+Otherwise arrange a private channel with the maintainer before sending sensitive
+details. Do not invent a contact address or publish an exploit report publicly.
 
-Avant fusion/release : exécuter les audits Python et Rust, examiner leurs résultats
-et les licences, mettre à jour les locks par PR, relancer les tests indépendants.
-Les hashes figent les paquets ; ils ne prouvent pas leur innocuité. La CI n'utilise
-que des données synthétiques et des permissions de lecture. Pas de publication
-automatique de release, pas d'upload de crash ou de télémétrie.
+Before merging or releasing: run Python and Rust audits, inspect results and
+licenses, update lockfiles through PRs, and rerun independent compatibility checks.
+Hashes pin artifacts; they do not prove software safety. CI uses only synthetic
+data and read-only repository permissions. No automatic release publishing,
+crash uploads, or telemetry.

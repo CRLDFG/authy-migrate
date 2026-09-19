@@ -7,3 +7,6 @@ dist/
 reference/target/
 *.proton.json
 reference/legacy/target/
+
+# Original user-supplied brief is retained locally; publish its English translation.
+/authy-migrate_cadrage_codex_v2.md

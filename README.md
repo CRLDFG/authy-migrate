@@ -1,16 +1,17 @@
 # authy-migrate
 
-Prototype **synthétique uniquement** de compatibilité avec les exports chiffrés
-Proton Authenticator. Il ne migre pas encore un export Authy réel.
+A **synthetic-data-only** compatibility prototype for encrypted Proton
+Authenticator exports. It does not yet migrate real Authy exports.
 
-Le cœur hors ligne crée en mémoire quatre TOTP publics de démonstration et les
-chiffre au format Proton. Aucun proxy, certificat, compte Proton, service cloud,
-upload ou télémétrie n'est requis. Ne jamais utiliser ces seeds sur de vrais comptes.
+The offline core creates four public demonstration TOTP entries in memory and
+protects them using Proton's native format. No proxy, certificate, Proton account,
+cloud service, upload, or telemetry is required. Never register these public seeds
+on real accounts.
 
-## Essayer localement
+## Try it locally
 
-Python 3.12+ avec support Argon2id dans cryptography et Rust 1.92+ pour le test
-indépendant. Les commandes d'installation nécessitent Internet ; la conversion non.
+Python 3.12+ with Argon2id support in cryptography; Rust 1.92+ for the independent
+reference checks. Installation needs Internet access; conversion does not.
 
 ```sh
 python3 -m venv .venv
@@ -19,21 +20,21 @@ python3 -m venv .venv
 .venv/bin/authy-migrate demo demo.proton.json
 ```
 
-La commande demande deux fois une phrase de passe d'archive de 16 caractères
-minimum. Utiliser une phrase longue et imprévisible ; la longueur seule ne garantit
-pas sa force. Ce n'est **pas** le mot de passe du compte Proton ni celui d'Authy.
-Les espaces et caractères Unicode sont conservés exactement. Aucun mot de passe
-n'est accepté en argument ou variable d'environnement. Un terminal interactif est
-obligatoire. La destination doit être nouvelle et dans un dossier privé de confiance.
+The command asks twice for an archive passphrase of at least 16 characters. Use a
+long, unpredictable passphrase; length alone does not ensure strength. This is
+**not** your Proton account password or Authy backup password. Whitespace and
+Unicode are preserved exactly. Password arguments and environment variables are
+not supported. An interactive terminal is required. Choose a new destination
+inside a trusted private directory.
 
-L'écriture POSIX utilise un fichier temporaire chiffré en 0600, fsync, puis un lien
-atomique sans écrasement. Windows : cœur testable, publication de fichier refusée
-jusqu'à implémentation et validation des ACL. Le prototype n'annonce donc pas de
-support Windows complet. Le cœur et les deux importeurs officiels passent la CI macOS/Linux/Windows.
-L’import dans l’application a été vérifié sur ce Mac avec Proton 1.4.3 (6).
-Ces essais ne constituent pas une annonce de support de migration Authy réelle.
+POSIX output uses an encrypted 0600 temporary file, fsync, and atomic hard-link
+publication without overwriting an existing destination. Windows: the core is
+testable, but file publication is refused until its ACL handling is implemented
+and verified. This is not full Windows support. The core and both official
+importers pass macOS/Linux/Windows CI. Application import was verified on this Mac
+with Proton 1.4.3 (6). These results do not establish real Authy migration support.
 
-## Vérifier
+## Verify
 
 ```sh
 .venv/bin/python -m pip install -r requirements-dev.lock
@@ -42,14 +43,15 @@ cargo build --locked --manifest-path reference/legacy/Cargo.toml
 .venv/bin/python -m pytest -q
 ```
 
-Sans un binaire Rust, le test indépendant correspondant est explicitement ignoré en local (échec en CI). La CI construit
-les deux binaires avant les tests. L'importeur reçoit uniquement le fichier chiffré par
-stdin ; il connaît la phrase de passe publique du jeu synthétique. Il ne convient
-pas aux données réelles et ne doit pas recevoir un diagnostic utilisateur brut.
+A missing Rust binary explicitly skips its reference check locally and fails CI.
+CI builds both binaries before testing. Each importer receives only the encrypted
+archive through stdin and knows the public synthetic passphrase. The harness is
+not suitable for real account data or raw user diagnostics.
 
-Voir [résultats](docs/validation.md), [protocole et sources](docs/protocol.md),
-[décision d'architecture](docs/ADR-001.md), [modèle de menace](docs/threat-model.md),
-[test manuel](docs/manual-test.md), [roadmap](docs/roadmap.md),
-[attributions](NOTICE.md) et [sécurité](SECURITY.md).
+Read the [validation evidence](docs/validation.md), [protocol and sources](docs/protocol.md),
+[architecture decision](docs/ADR-001.md), [threat model](docs/threat-model.md),
+[manual test procedure](docs/manual-test.md), [roadmap](docs/roadmap.md),
+[project brief](docs/project-brief.md), [attribution](NOTICE.md), and
+[security policy](SECURITY.md).
 
-GPL-3.0-only. Aucune revendication d'audit externe ni de compatibilité universelle.
+GPL-3.0-only. No independent security audit or universal compatibility is claimed.

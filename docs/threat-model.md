@@ -1,30 +1,30 @@
-# Architecture, menaces et limites
+# Architecture, threats, and limitations
 
-Chemin actuel : fixtures synthétiques → OtpEntry validés → JSON en mémoire →
-Argon2id/AES-GCM → archive chiffrée → écriture atomique → import manuel.
-Le statut `structural-only` ne signifie ni codes vérifiés ni migration terminée.
-Le futur EncryptedAuthyRecord et ses adaptateurs sont différés après le gate de
-compatibilité ; ils ne seront pas des URI ou des heuristiques de détection.
+Current path: public synthetic fixtures → validated OtpEntry objects → in-memory
+JSON → Argon2id/AES-GCM → encrypted archive → atomic publication → manual import.
+The `structural-only` status means neither verified codes nor completed migration.
+EncryptedAuthyRecord and source adapters follow the compatibility gate; they must
+not be replaced by URI-only models or format-detection heuristics.
 
-Actifs : seeds, mots de passe, labels et issuers. Les objets OTP ont un repr
-expurgé. La CLI masque les détails d'exception. Il reste possible pour un appelant
-Python d'inspecter les champs, une traceback avec locals ou la mémoire : l'API
-n'est pas une enclave. Aucun logger n'est enregistré pour la bibliothèque Proton.
+Assets include seeds, passwords, account labels, and issuers. OTP objects have
+redacted repr output. The CLI suppresses exception details. A Python caller can
+still inspect fields, traceback locals, and memory: this API is not an enclave.
+No logger is registered for the Proton reference library.
 
-L'application contrôle ses écritures volontaires et ses messages. Elle ne contrôle
-pas swap, hibernation, crash dumps, copies internes de bytes/str, captures d'écran,
-poste compromis, administrateur ou traitement ultérieur par Proton. 0600 ne protège
-pas contre tous les processus du même utilisateur ; des ACL héritées peuvent
-nécessiter une revue. Employer un dossier privé sans ACL additionnelles. Les tests
-ne constituent pas une preuve système exhaustive d'absence d'accès réseau ou I/O.
+The application controls its deliberate writes and messages. It cannot control
+swap, hibernation, crash dumps, internal bytes/str copies, screenshots, a compromised
+host, administrators, or Proton's subsequent handling. Mode 0600 does not protect
+against every same-user process; inherited ACLs may require review. Use a trusted
+private directory without additional ACL grants. The tests are not an exhaustive
+system-level proof of no network or file activity.
 
-La publication refuse les cibles existantes, y compris les liens symboliques. Un
-échec supprime normalement le temporaire chiffré ; SIGKILL/panne peut le laisser.
-Le fsync porte sur le contenu ; durabilité de l'entrée de répertoire après coupure
-non garantie. Un échec de nettoyage est un échec global, même si la cible existe.
-Aucun « tout détruit » n'est annoncé. Pas de nettoyage destructif des fichiers
-préexistants. Pas de garantie d'effacement physique du fichier exporté.
+Publication rejects existing destinations, including symbolic links. Ordinary
+failures remove the encrypted temporary file; SIGKILL or power loss can leave it.
+fsync covers file contents; directory-entry durability after power loss is not
+guaranteed. Cleanup failure is an overall failure even if the target exists. The
+application never announces complete destruction. Existing user files are not
+removed. Physical erasure of an exported file is not guaranteed.
 
-Les tests emploient seulement des secrets publics. Le cœur ne possède aucun code
-réseau. Installation, compilation et audits utilisent le réseau avec données
-publiques ; ils sont distincts de la conversion. Aucun certificat ni capture réelle.
+Tests use public seeds only. The core contains no network code. Installation,
+builds, and audits use public network sources separately from conversion. No
+certificate installation or real traffic capture is performed.
