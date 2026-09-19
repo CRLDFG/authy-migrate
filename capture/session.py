@@ -15,7 +15,9 @@ from version import ENGINE_REVISION
 
 class Session:
     def __init__(self, python, endpoint, proxy_auth, *, timeout=60, upstream_ca=None,
-                 listen_host='127.0.0.1', app_version, source_reference):
+                 listen_host='127.0.0.1', app_version, source_reference, diagnostic=False):
+        self.diagnostic = diagnostic
+        self.observation = None
         self.provenance = dict(version=1, host=endpoint['host'], port=endpoint['port'],
             path=endpoint['path'], app_version=app_version,
             source_reference=source_reference, engine_revision=ENGINE_REVISION)
@@ -32,6 +34,8 @@ class Session:
         self.selector = selectors.DefaultSelector()
         config = dict(endpoint=endpoint, confdir=str(confdir), listen_host=listen_host,
                       proxy_auth=proxy_auth, timeout=timeout)
+        if diagnostic:
+            config['diagnostic'] = True
         if upstream_ca is not None:
             config["upstream_ca"] = str(upstream_ca)
         try:
@@ -87,10 +91,24 @@ class Session:
     def collect(self, timeout=5):
         message = self.receive(timeout)
         if message.get("type") == "record":
+            if self.diagnostic:
+                raise CaptureError('Unexpected record during diagnostic.')
             self.total += len(json.dumps(message))
             if len(self.records) >= 1000 or self.total > 8 * 1024 * 1024:
                 raise CaptureError("Aggregate capture limit exceeded.")
             self.records.append(message["record"])
+        elif message.get('type') == 'diagnostic' and self.diagnostic:
+            from policy import UPDATE_PATH
+            keys = {'form_valid', 'has_query', 'has_iv', 'has_kdf', 'duplicate_fields',
+                    'unknown_fields', 'record_accepted'}
+            facts = message.get('facts')
+            if (self.observation is not None or set(message) != {'type', 'path', 'facts'}
+                    or type(message.get('path')) is not str
+                    or not UPDATE_PATH.fullmatch(message['path'])
+                    or type(facts) is not dict or set(facts) != keys
+                    or any(type(value) is not bool for value in facts.values())):
+                raise CaptureError('Invalid diagnostic result.')
+            self.observation = dict(path=message['path'], facts=facts)
         elif message.get("type") == "done":
             self.done = message.get("ok") is True
         else:
@@ -105,8 +123,14 @@ class Session:
             while self.done is None:
                 self.collect()
             self.process.wait(timeout=5)
-            if self.process.returncode != 0 or not self.done or not self.records:
+            if self.process.returncode != 0 or not self.done:
                 raise CaptureError("Capture incomplete; no conversion permitted.")
+            if self.diagnostic:
+                if self.observation is None:
+                    raise CaptureError('No update request observed; compatibility remains unknown.')
+                return self.observation
+            if not self.records:
+                raise CaptureError('Capture incomplete; no conversion permitted.')
             # Parent independently validates all received records and aggregate KDF cost.
             from authy_migrate.authy import parse_authy
             result = json.dumps({"capture": self.provenance, "authenticator_tokens": self.records}).encode()

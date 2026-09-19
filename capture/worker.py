@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT.parent / "src"))
 from policy import CaptureError, Endpoint, MAX_BODY, encrypted_record
+from policy import DiagnosticEndpoint, diagnose_form
 from version import ENGINE_URL, ENGINE_ARCHIVE_SHA256
 from authy_migrate.authy import parse_authy
 from mitmproxy import http, options
@@ -30,8 +31,10 @@ def send(kind, **values):
 
 
 class Capture:
-    def __init__(self, master, endpoint):
+    def __init__(self, master, endpoint, diagnostic=False):
         self.master, self.endpoint = master, endpoint
+        self.diagnostic = diagnostic
+        self.observation = None
         self.tunnels = set()
         self.denied = set()
         self.failed = False
@@ -93,6 +96,15 @@ class Capture:
     def request(self, flow):
         if flow.response is not None:
             return
+        if self.diagnostic:
+            from urllib.parse import urlsplit
+            target = urlsplit(flow.request.path)
+            if self.observation is None:
+                self.observation = dict(path=target.path, facts=diagnose_form(
+                    flow.request.raw_content, parse_authy, has_query='?' in flow.request.path))
+            # Diagnostic requests never reach Authy. This intentionally interrupts sync.
+            flow.response = http.Response.make(409, b'Diagnostic only; request not forwarded.')
+            return
         try:
             flow.metadata["encrypted_record"] = encrypted_record(
                 flow.request.raw_content, parse_authy)
@@ -144,9 +156,14 @@ async def run(config):
             or source.get('archive_info', {}).get('hashes', {}).get('sha256') != ENGINE_ARCHIVE_SHA256):
         raise CaptureError('Capture engine does not match the pinned source.')
     required = {"endpoint", "confdir", "listen_host", "proxy_auth", "timeout"}
-    if set(config) - required - {"upstream_ca"} or not required <= config.keys():
+    if set(config) - required - {"upstream_ca", "diagnostic"} or not required <= config.keys():
         raise CaptureError("Invalid worker configuration.")
     endpoint = Endpoint(**config["endpoint"])
+    diagnostic = config.get('diagnostic', False)
+    if type(diagnostic) is not bool:
+        raise CaptureError('Invalid diagnostic mode.')
+    if diagnostic:
+        endpoint = DiagnosticEndpoint(endpoint)
     if (type(config["timeout"]) is not int or not 1 <= config["timeout"] <= 300
             or not ipaddress.ip_address(config["listen_host"]).is_private
             or ipaddress.ip_address(config["listen_host"]).is_unspecified
@@ -170,7 +187,7 @@ async def run(config):
                 scripts=[], save_stream_file=None, hardump="",
                 ssl_verify_upstream_trusted_ca=config.get("upstream_ca"),
                 allow_hosts=[rf"^{endpoint.host.replace('.', '[.]')}:{endpoint.port}$"])
-    capture = Capture(master, endpoint)
+    capture = Capture(master, endpoint, diagnostic)
     master.addons.add(capture)
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -183,6 +200,8 @@ async def run(config):
         await master.run()
     finally:
         timer.cancel()
+    if diagnostic and capture.observation is not None:
+        send('diagnostic', **capture.observation)
     send("done", ok=not capture.failed)
 
 

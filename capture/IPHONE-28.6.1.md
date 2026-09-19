@@ -42,6 +42,11 @@ Record the following locally. Share only non-sensitive readiness answers:
 
 ## Compatibility work still required
 
+A [user-run diagnostic](DIAGNOSTIC.md) can now observe the first matching update
+route and report fixed schema booleans, without forwarding it or exporting its
+body. It has synthetic tests only. It does not force a sync or establish full
+compatibility; opening the app may produce no matching request.
+
 Public evidence provides a candidate route, not a verified 28.6.1 profile:
 
 - [The author's Authy protocol investigation (2023)](https://velvetcache.org/2023/05/12/the-authy-backup-system/)
